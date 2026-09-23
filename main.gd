@@ -31,6 +31,8 @@ var stats_label:Label
 var next_job_button:Button
 var upgrade_button:Button
 var save_label:Label
+var negotiate_button:Button
+var negotiated_bonus=0
 
 var jobs=[
  {"name":"Jessica R.","car":"BMW 328i","pay":85,"pos":Vector3(8,0.25,-8),"color":Color(0.08,0.32,0.70)},
@@ -64,6 +66,7 @@ func _build_ui_and_world():
  wash_bar=ProgressBar.new();wash_bar.position=Vector2(440,605);wash_bar.size=Vector2(400,32);wash_bar.max_value=100;$HUD.add_child(wash_bar)
  next_job_button=Button.new();next_job_button.text="NEXT CUSTOMER";next_job_button.position=Vector2(1000,610);next_job_button.size=Vector2(210,48);next_job_button.pressed.connect(_offer_next_job);$HUD.add_child(next_job_button)
  upgrade_button=Button.new();upgrade_button.text="BUY PRESSURE WASHER - $200";upgrade_button.position=Vector2(930,545);upgrade_button.size=Vector2(290,48);upgrade_button.pressed.connect(_buy_upgrade);$HUD.add_child(upgrade_button)
+ negotiate_button=Button.new();negotiate_button.text="NEGOTIATE +";negotiate_button.position=Vector2(880,300);negotiate_button.size=Vector2(180,42);negotiate_button.pressed.connect(_negotiate);$HUD.add_child(negotiate_button)
  save_label=Label.new();save_label.position=Vector2(1000,680);save_label.text="AUTOSAVE ON";$HUD.add_child(save_label)
 
 func _update_hud():
@@ -74,7 +77,7 @@ func _update_hud():
 
 func _offer_next_job():
  current_job=(current_job+1)%jobs.size()
- var j=jobs[current_job];job_state=0;wash_amount=0
+ var j=jobs[current_job];job_state=0;wash_amount=0;negotiated_bonus=0;negotiate_button.disabled=false
  job_panel.visible=true;next_job_button.visible=false;wash_bar.visible=false;wash_label.visible=false
  marker.visible=false;customer_car.visible=false;customer_npc.visible=false
  objective.text="OBJECTIVE: Build your detailing business"
@@ -109,12 +112,12 @@ func _process(delta):
 
 func _complete_job():
  job_state=3
- var j=jobs[current_job];cash+=j.pay;total_earned+=j.pay;jobs_completed+=1;jobs_today+=1;reputation+=1
+ var j=jobs[current_job];var payout=j.pay+negotiated_bonus;cash+=payout;total_earned+=payout;jobs_completed+=1;jobs_today+=1;reputation+=1
  var expense=0
  if jobs_today>=3:
   expense=35;cash-=expense;total_expenses+=expense;day+=1;jobs_today=0
  _update_hud();_save_game()
- objective.text="JOB COMPLETE • $%d earned • ★★★★★"%j.pay
+ objective.text="JOB COMPLETE • $%d earned • ★★★★★"%payout
  status_label.text=j.name+": Great work! I'll recommend you."
  if expense>0:status_label.text+="  End-of-day fuel/supplies: -$%d"%expense
  wash_bar.visible=false;wash_label.visible=false;marker.visible=false;next_job_button.visible=true
@@ -137,3 +140,14 @@ func _load_game():
  if typeof(d)!=TYPE_DICTIONARY:return
  cash=int(d.get("cash",300));reputation=int(d.get("reputation",0));jobs_completed=int(d.get("jobs",0));equipment_level=int(d.get("equipment",0))
  day=int(d.get("day",1));jobs_today=int(d.get("today",0));total_earned=int(d.get("earned",0));total_expenses=int(d.get("expenses",0))
+
+func _negotiate():
+ if job_state!=0:return
+ var chance=55+min(reputation*5,30)
+ if randi_range(1,100)<=chance:
+  negotiated_bonus=20
+  status_label.text="NEGOTIATION SUCCESS • Customer added $20"
+ else:
+  negotiated_bonus=0
+  status_label.text="Customer held firm on the original price"
+ negotiate_button.disabled=true
