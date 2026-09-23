@@ -29,6 +29,8 @@ var milestone_announced=false
 var streak=0
 var best_streak=0
 var quality_bonus=0
+var pressure_jobs=0
+var pressure_unlocked=false
 
 var marker:MeshInstance3D
 var customer_car:MeshInstance3D
@@ -47,6 +49,7 @@ var zone_marker:MeshInstance3D
 var business_label:Label
 var referral_label:Label
 var streak_label:Label
+var branch_label:Label
 var reset_button:Button
 var skip_button:Button
 
@@ -97,7 +100,7 @@ func _button(text:String,pos:Vector2,size:Vector2)->Button:
  var b=Button.new();b.text=text;b.position=pos;b.size=size;$HUD.add_child(b);return b
 
 func _build_ui():
- business_label=_label(Vector2(24,105),20);objective=_label(Vector2(24,140),20);equipment_label=_label(Vector2(24,150),17);stats_label=_label(Vector2(24,205),16);milestone_label=_label(Vector2(24,240),16);referral_label=_label(Vector2(24,275),15);streak_label=_label(Vector2(24,305),15)
+ business_label=_label(Vector2(24,105),20);objective=_label(Vector2(24,140),20);equipment_label=_label(Vector2(24,150),17);stats_label=_label(Vector2(24,205),16);milestone_label=_label(Vector2(24,240),16);referral_label=_label(Vector2(24,275),15);streak_label=_label(Vector2(24,305),15);branch_label=_label(Vector2(24,335),15)
  progress_label=_label(Vector2(440,570),18);progress_bar=ProgressBar.new();progress_bar.position=Vector2(440,605);progress_bar.size=Vector2(400,32);progress_bar.max_value=100;$HUD.add_child(progress_bar)
  next_job_button=_button("NEXT CUSTOMER",Vector2(1000,610),Vector2(210,48));next_job_button.pressed.connect(_offer_next_job)
  upgrade_button=_button("BUY PRESSURE WASHER - $200",Vector2(930,545),Vector2(290,48));upgrade_button.pressed.connect(_buy_upgrade)
@@ -114,6 +117,8 @@ func _update_hud():
  milestone_label.text="GOAL: $10,000 BUSINESS FUND  •  $%d / $10,000"%cash
  referral_label.text="REFERRALS: %d  •  NEXT UNLOCK: Pressure Washing at $2,500 + 12 REP"%referrals
  streak_label.text="5-STAR STREAK: %d  •  BEST: %d"%[streak,best_streak]
+ pressure_unlocked=cash>=2500 and reputation>=12
+ branch_label.text="BUSINESS BRANCH: "+("PRESSURE WASHING UNLOCKED" if pressure_unlocked else "Pressure washing locked")
  if cash>=2500 and reputation>=12: business_level=max(business_level,2)
  if cash>=10000 and not milestone_announced: milestone_announced=true; business_level=max(business_level,3)
  upgrade_button.visible=equipment_level==0 and cash>=500
@@ -203,7 +208,7 @@ func _refuel():
   cash-=25;total_expenses+=25;fuel=100;_update_hud();_save_game();status_label.text="TANK FILLED • -$25"
 
 func _save_game():
- var data={"cash":cash,"reputation":reputation,"jobs":jobs_completed,"equipment":equipment_level,"day":day,"today":jobs_today,"earned":total_earned,"expenses":total_expenses,"fuel":fuel,"customer":current_job,"referrals":referrals,"business_level":business_level,"streak":streak,"best_streak":best_streak}
+ var data={"cash":cash,"reputation":reputation,"jobs":jobs_completed,"equipment":equipment_level,"day":day,"today":jobs_today,"earned":total_earned,"expenses":total_expenses,"fuel":fuel,"customer":current_job,"referrals":referrals,"business_level":business_level,"streak":streak,"best_streak":best_streak,"pressure_unlocked":pressure_unlocked}
  var f=FileAccess.open("user://savegame.json",FileAccess.WRITE)
  if f:f.store_string(JSON.stringify(data))
 
@@ -214,7 +219,7 @@ func _load_game():
  var d=JSON.parse_string(f.get_as_text())
  if typeof(d)!=TYPE_DICTIONARY:return
  cash=int(d.get("cash",300));reputation=int(d.get("reputation",0));jobs_completed=int(d.get("jobs",0));equipment_level=int(d.get("equipment",0))
- day=int(d.get("day",1));jobs_today=int(d.get("today",0));total_earned=int(d.get("earned",0));total_expenses=int(d.get("expenses",0));fuel=float(d.get("fuel",100));current_job=int(d.get("customer",-1));referrals=int(d.get("referrals",0));business_level=int(d.get("business_level",1));streak=int(d.get("streak",0));best_streak=int(d.get("best_streak",0))
+ day=int(d.get("day",1));jobs_today=int(d.get("today",0));total_earned=int(d.get("earned",0));total_expenses=int(d.get("expenses",0));fuel=float(d.get("fuel",100));current_job=int(d.get("customer",-1));referrals=int(d.get("referrals",0));business_level=int(d.get("business_level",1));streak=int(d.get("streak",0));best_streak=int(d.get("best_streak",0));pressure_unlocked=bool(d.get("pressure_unlocked",false))
 
 func _decline_lead():
  if job_state!=0:return
