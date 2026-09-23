@@ -22,6 +22,10 @@ var negotiated_bonus=0
 var zone_index=0
 var zone_progress=0.0
 var last_player_pos=Vector3.ZERO
+var referrals=0
+var business_level=1
+var business_name="Tony Mobile Detail"
+var milestone_announced=false
 
 var marker:MeshInstance3D
 var customer_car:MeshInstance3D
@@ -37,6 +41,8 @@ var upgrade_button:Button
 var negotiate_button:Button
 var refuel_button:Button
 var zone_marker:MeshInstance3D
+var business_label:Label
+var referral_label:Label
 
 var jobs=[
  {"name":"Jessica R.","car":"BMW 328i","pay":85,"pos":Vector3(8,.25,-8),"color":Color(.08,.32,.70)},
@@ -85,7 +91,7 @@ func _button(text:String,pos:Vector2,size:Vector2)->Button:
  var b=Button.new();b.text=text;b.position=pos;b.size=size;$HUD.add_child(b);return b
 
 func _build_ui():
- objective=_label(Vector2(24,112),20);equipment_label=_label(Vector2(24,150),17);stats_label=_label(Vector2(24,185),16);milestone_label=_label(Vector2(24,220),16)
+ business_label=_label(Vector2(24,105),20);objective=_label(Vector2(24,140),20);equipment_label=_label(Vector2(24,150),17);stats_label=_label(Vector2(24,205),16);milestone_label=_label(Vector2(24,240),16);referral_label=_label(Vector2(24,275),15)
  progress_label=_label(Vector2(440,570),18);progress_bar=ProgressBar.new();progress_bar.position=Vector2(440,605);progress_bar.size=Vector2(400,32);progress_bar.max_value=100;$HUD.add_child(progress_bar)
  next_job_button=_button("NEXT CUSTOMER",Vector2(1000,610),Vector2(210,48));next_job_button.pressed.connect(_offer_next_job)
  upgrade_button=_button("BUY PRESSURE WASHER - $200",Vector2(930,545),Vector2(290,48));upgrade_button.pressed.connect(_buy_upgrade)
@@ -94,9 +100,13 @@ func _build_ui():
 
 func _update_hud():
  cash_label.text="CASH: $%d"%cash
+ business_label.text="%s  •  BUSINESS LEVEL %d"%[business_name,business_level]
  stats_label.text="DAY %d  •  JOBS %d  •  REP %d★  •  NET $%d  •  FUEL %d%%"%[day,jobs_completed,reputation,total_earned-total_expenses,int(fuel)]
  equipment_label.text="EQUIPMENT: "+("Pressure Washer" if equipment_level==1 else "Bucket + Basic Wash Kit")
  milestone_label.text="GOAL: $10,000 BUSINESS FUND  •  $%d / $10,000"%cash
+ referral_label.text="REFERRALS: %d  •  NEXT UNLOCK: Pressure Washing at $2,500 + 12 REP"%referrals
+ if cash>=2500 and reputation>=12: business_level=max(business_level,2)
+ if cash>=10000 and not milestone_announced: milestone_announced=true; business_level=max(business_level,3)
  upgrade_button.visible=equipment_level==0 and cash>=500
  refuel_button.disabled=cash<25 or fuel>=99
 
@@ -157,6 +167,7 @@ func _detail_process(delta):
 func _complete_job():
  job_state=3;zone_marker.visible=false
  var j=jobs[current_job];var payout=j.pay+negotiated_bonus;cash+=payout;total_earned+=payout;jobs_completed+=1;jobs_today+=1;reputation+=1
+ if randi_range(1,100)<=min(25+reputation*2,70): referrals+=1
  customer_car.mesh.material=_mat(j.color)
  var expense=0
  if jobs_today>=3:expense=35;cash-=expense;total_expenses+=expense;day+=1;jobs_today=0
@@ -182,7 +193,7 @@ func _refuel():
   cash-=25;total_expenses+=25;fuel=100;_update_hud();_save_game();status_label.text="TANK FILLED • -$25"
 
 func _save_game():
- var data={"cash":cash,"reputation":reputation,"jobs":jobs_completed,"equipment":equipment_level,"day":day,"today":jobs_today,"earned":total_earned,"expenses":total_expenses,"fuel":fuel,"customer":current_job}
+ var data={"cash":cash,"reputation":reputation,"jobs":jobs_completed,"equipment":equipment_level,"day":day,"today":jobs_today,"earned":total_earned,"expenses":total_expenses,"fuel":fuel,"customer":current_job,"referrals":referrals,"business_level":business_level}
  var f=FileAccess.open("user://savegame.json",FileAccess.WRITE)
  if f:f.store_string(JSON.stringify(data))
 
@@ -193,4 +204,4 @@ func _load_game():
  var d=JSON.parse_string(f.get_as_text())
  if typeof(d)!=TYPE_DICTIONARY:return
  cash=int(d.get("cash",300));reputation=int(d.get("reputation",0));jobs_completed=int(d.get("jobs",0));equipment_level=int(d.get("equipment",0))
- day=int(d.get("day",1));jobs_today=int(d.get("today",0));total_earned=int(d.get("earned",0));total_expenses=int(d.get("expenses",0));fuel=float(d.get("fuel",100));current_job=int(d.get("customer",-1))
+ day=int(d.get("day",1));jobs_today=int(d.get("today",0));total_earned=int(d.get("earned",0));total_expenses=int(d.get("expenses",0));fuel=float(d.get("fuel",100));current_job=int(d.get("customer",-1));referrals=int(d.get("referrals",0));business_level=int(d.get("business_level",1))
