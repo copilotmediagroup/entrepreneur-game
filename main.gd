@@ -17,6 +17,8 @@ var day=1
 var jobs_today=0
 var total_earned=0
 var total_expenses=0
+var fuel=100.0
+var last_player_pos=Vector3.ZERO
 
 var marker:MeshInstance3D
 var customer_car:MeshInstance3D
@@ -86,6 +88,10 @@ func _on_accept_pressed():
  objective.text="OBJECTIVE: Go to %s's vehicle"%j.name;status_label.text="JOB ACCEPTED • %s • $%d"%[j.car,j.pay]
 
 func _process(delta):
+ var moved=player.global_position.distance_to(last_player_pos)
+ if player.is_driving() and moved>0.01:
+  fuel=max(0.0,fuel-moved*0.035)
+ last_player_pos=player.global_position
  if job_state==1:
   var dist=player.global_position.distance_to(marker.global_position)
   status_label.text="%s's %s • %.0f m away"%[jobs[current_job].name,jobs[current_job].car,dist]
