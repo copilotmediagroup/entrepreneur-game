@@ -43,6 +43,8 @@ var refuel_button:Button
 var zone_marker:MeshInstance3D
 var business_label:Label
 var referral_label:Label
+var reset_button:Button
+var skip_button:Button
 
 var jobs=[
  {"name":"Jessica R.","car":"BMW 328i","pay":85,"pos":Vector3(8,.25,-8),"color":Color(.08,.32,.70)},
@@ -97,6 +99,8 @@ func _build_ui():
  upgrade_button=_button("BUY PRESSURE WASHER - $200",Vector2(930,545),Vector2(290,48));upgrade_button.pressed.connect(_buy_upgrade)
  negotiate_button=_button("NEGOTIATE +$20",Vector2(880,300),Vector2(180,42));negotiate_button.pressed.connect(_negotiate)
  refuel_button=_button("REFUEL $25",Vector2(1080,300),Vector2(140,42));refuel_button.pressed.connect(_refuel)
+ skip_button=_button("DECLINE LEAD",Vector2(880,350),Vector2(180,38));skip_button.pressed.connect(_decline_lead)
+ reset_button=_button("NEW GAME",Vector2(1100,665),Vector2(120,34));reset_button.pressed.connect(_new_game)
 
 func _update_hud():
  cash_label.text="CASH: $%d"%cash
@@ -113,14 +117,14 @@ func _update_hud():
 func _offer_next_job():
  current_job=(current_job+1)%jobs.size();job_state=0;negotiated_bonus=0;zone_index=0;zone_progress=0
  var j=jobs[current_job];job_panel.visible=true;next_job_button.visible=false;progress_bar.visible=false;progress_label.visible=false;zone_marker.visible=false
- marker.visible=false;customer_car.visible=false;customer_npc.visible=false;negotiate_button.visible=true;negotiate_button.disabled=false
+ marker.visible=false;customer_car.visible=false;customer_npc.visible=false;negotiate_button.visible=true;negotiate_button.disabled=false;skip_button.visible=true
  objective.text="OBJECTIVE: Grow your mobile detailing business"
  job_text.text="%s\n%s\nFull Detail\nOffer: $%d"%[j.name,j.car,j.pay]
  status_label.text="NEW LEAD • Accept or negotiate before somebody else gets it"
  hint.text="WASD Walk  •  F Enter/Exit Car  •  E Detail"
 
 func _on_accept_pressed():
- var j=jobs[current_job];job_state=1;job_panel.visible=false;negotiate_button.visible=false
+ var j=jobs[current_job];job_state=1;job_panel.visible=false;negotiate_button.visible=false;skip_button.visible=false
  marker.position=j.pos;customer_car.position=j.pos+Vector3(2,.45,0);customer_npc.position=j.pos+Vector3(-1.5,.85,0)
  marker.visible=true;customer_car.visible=true;customer_npc.visible=true;customer_car.mesh.material=_mat(Color(.28,.2,.12))
  objective.text="OBJECTIVE: Drive to %s"%j.name;status_label.text="JOB ACCEPTED • %s • $%d"%[j.car,j.pay+negotiated_bonus]
@@ -205,3 +209,12 @@ func _load_game():
  if typeof(d)!=TYPE_DICTIONARY:return
  cash=int(d.get("cash",300));reputation=int(d.get("reputation",0));jobs_completed=int(d.get("jobs",0));equipment_level=int(d.get("equipment",0))
  day=int(d.get("day",1));jobs_today=int(d.get("today",0));total_earned=int(d.get("earned",0));total_expenses=int(d.get("expenses",0));fuel=float(d.get("fuel",100));current_job=int(d.get("customer",-1));referrals=int(d.get("referrals",0));business_level=int(d.get("business_level",1))
+
+func _decline_lead():
+ if job_state!=0:return
+ status_label.text="Lead declined • Looking for another customer"
+ _offer_next_job()
+
+func _new_game():
+ cash=300;reputation=0;jobs_completed=0;current_job=-1;equipment_level=0;day=1;jobs_today=0;total_earned=0;total_expenses=0;fuel=100;referrals=0;business_level=1;milestone_announced=false
+ _save_game();_update_hud();_offer_next_job()
