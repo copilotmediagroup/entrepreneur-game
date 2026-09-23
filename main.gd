@@ -84,10 +84,16 @@ func _box(size:Vector3,pos:Vector3,color:Color):
 func _build_world_details():
  for z in [-13.0,-7.0,-1.0,5.0,11.0]:
   _box(Vector3(.18,.03,3.0),Vector3(0,.2,z),Color(.95,.8,.1))
+ _box(Vector3(42,.12,1.1),Vector3(0,.18,-16),Color(.55,.55,.55))
+ _box(Vector3(42,.12,1.1),Vector3(0,.18,16),Color(.55,.55,.55))
+ _box(Vector3(1.2,.12,34),Vector3(-6.8,.18,0),Color(.6,.6,.6))
+ _box(Vector3(1.2,.12,34),Vector3(6.8,.18,0),Color(.6,.6,.6))
  for x in [-16.0,16.0]:
   _box(Vector3(5,3.5,5),Vector3(x,1.75,-11),Color(.72,.62,.5))
   _box(Vector3(5,3.5,5),Vector3(x,1.75,3),Color(.62,.7,.76))
   _box(Vector3(5,3.5,5),Vector3(x,1.75,11),Color(.76,.7,.58))
+  for z in [-13.0,-5.0,3.0,11.0]:
+   _box(Vector3(.7,3,.7),Vector3(x+(-3 if x<0 else 3),1.5,z),Color(.22,.36,.14))
  marker=MeshInstance3D.new();var mm=CylinderMesh.new();mm.top_radius=.8;mm.bottom_radius=.8;mm.height=.12
  var glow=_mat(Color(.1,.7,1));glow.emission_enabled=true;glow.emission=Color(.1,.55,1);glow.emission_energy_multiplier=3;mm.material=glow;marker.mesh=mm;add_child(marker)
  customer_car=MeshInstance3D.new();var cm=BoxMesh.new();cm.size=Vector3(2.2,1.2,4.5);cm.material=_mat(Color(.28,.2,.12));customer_car.mesh=cm;add_child(customer_car)
