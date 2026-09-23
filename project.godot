@@ -18,3 +18,4 @@ move_right={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":68)
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 environment/defaults/default_clear_color=Color(0.45,0.7,0.95,1)
+
