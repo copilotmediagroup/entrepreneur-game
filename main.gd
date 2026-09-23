@@ -33,6 +33,7 @@ var upgrade_button:Button
 var save_label:Label
 var negotiate_button:Button
 var negotiated_bonus=0
+var milestone_label:Label
 
 var jobs=[
  {"name":"Jessica R.","car":"BMW 328i","pay":85,"pos":Vector3(8,0.25,-8),"color":Color(0.08,0.32,0.70)},
@@ -68,11 +69,13 @@ func _build_ui_and_world():
  upgrade_button=Button.new();upgrade_button.text="BUY PRESSURE WASHER - $200";upgrade_button.position=Vector2(930,545);upgrade_button.size=Vector2(290,48);upgrade_button.pressed.connect(_buy_upgrade);$HUD.add_child(upgrade_button)
  negotiate_button=Button.new();negotiate_button.text="NEGOTIATE +";negotiate_button.position=Vector2(880,300);negotiate_button.size=Vector2(180,42);negotiate_button.pressed.connect(_negotiate);$HUD.add_child(negotiate_button)
  save_label=Label.new();save_label.position=Vector2(1000,680);save_label.text="AUTOSAVE ON";$HUD.add_child(save_label)
+ milestone_label=Label.new();milestone_label.position=Vector2(24,220);milestone_label.add_theme_font_size_override("font_size",16);$HUD.add_child(milestone_label)
 
 func _update_hud():
  cash_label.text="CASH: $%d"%cash
  stats_label.text="DAY %d  •  JOBS %d  •  REP %d★  •  NET $%d"%[day,jobs_completed,reputation,total_earned-total_expenses]
  equipment_label.text="EQUIPMENT: "+("Pressure Washer" if equipment_level==1 else "Bucket + Basic Wash Kit")
+ milestone_label.text="GOAL: Turn your starter cash into $10,000 • Progress $%d / $10,000"%cash
  upgrade_button.visible=equipment_level==0 and cash>=500
 
 func _offer_next_job():
