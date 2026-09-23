@@ -43,3 +43,9 @@ func _toggle_vehicle():
   driving=true;global_position=Vector3(old_car.global_position.x,1,old_car.global_position.z)
 
 func is_driving()->bool:return driving
+
+func force_exit_vehicle():
+ if driving:
+  driving=false
+  global_position+=Vector3(2,0,0)
+  velocity=Vector3.ZERO
