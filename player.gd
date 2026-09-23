@@ -12,8 +12,7 @@ var driving=false
 var old_car:MeshInstance3D
 var f_was_down=false
 
-func _ready():
- old_car=get_node("../OldCar")
+func _ready(): old_car=get_node("../OldCar")
 
 func _physics_process(delta):
  var input=Input.get_vector("move_left","move_right","move_forward","move_back")
@@ -24,10 +23,11 @@ func _physics_process(delta):
  velocity.z=move_toward(velocity.z,target.z,ACCEL*delta)
  if not is_on_floor():velocity.y-=GRAVITY*delta
  else:velocity.y=0
- if direction.length()>.05:$Mesh.rotation.y=lerp_angle($Mesh.rotation.y,atan2(direction.x,direction.z),10*delta)
+ if direction.length()>.05:
+  $Mesh.rotation.y=lerp_angle($Mesh.rotation.y,atan2(direction.x,direction.z),10*delta)
+  if driving:old_car.rotation.y=$Mesh.rotation.y
  move_and_slide()
- global_position.x=clamp(global_position.x,MIN_X,MAX_X)
- global_position.z=clamp(global_position.z,MIN_Z,MAX_Z)
+ global_position.x=clamp(global_position.x,MIN_X,MAX_X);global_position.z=clamp(global_position.z,MIN_Z,MAX_Z)
  if driving:
   old_car.global_position=Vector3(global_position.x,.7,global_position.z);$Mesh.visible=false
  else:$Mesh.visible=true
@@ -39,5 +39,7 @@ func _physics_process(delta):
 func _toggle_vehicle():
  if driving:
   driving=false;global_position+=Vector3(2,0,0)
- elif global_position.distance_to(old_car.global_position)<3.0:
+ elif global_position.distance_to(old_car.global_position)<3:
   driving=true;global_position=Vector3(old_car.global_position.x,1,old_car.global_position.z)
+
+func is_driving()->bool:return driving
