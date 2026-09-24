@@ -12,7 +12,7 @@ func complete_customer(reputation: int) -> Dictionary:
 	lifetime_customers += 1
 	streak += 1
 	best_streak = max(best_streak, streak)
-	var referred := randi_range(1, 100) <= min(25 + reputation * 2, 70)
+	var referred: bool = randi_range(1, 100) <= min(25 + reputation * 2, 70)
 	if referred:
 		referrals += 1
 	return {"referral": referred, "quality_bonus": 10 if streak % 5 == 0 else 0}

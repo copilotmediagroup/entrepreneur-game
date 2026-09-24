@@ -8,9 +8,13 @@ extends Node3D
 @onready var job_title: Label = $HUD/JobPanel/JobTitle
 @onready var hint: Label = $HUD/Hint
 
-var business := BusinessSystem.new()
-var economy := EconomySystem.new()
-var pressure := PressureBusiness.new()
+const BusinessSystemScript = preload("res://business_system.gd")
+const EconomySystemScript = preload("res://economy_system.gd")
+const PressureBusinessScript = preload("res://pressure_business.gd")
+
+var business = BusinessSystemScript.new()
+var economy = EconomySystemScript.new()
+var pressure = PressureBusinessScript.new()
 
 var cash := 300
 var reputation := 0
@@ -382,7 +386,7 @@ func _service_process(delta: float) -> void:
 		status_label.text = "Move closer to the yellow work point"
 		return
 	if Input.is_action_pressed("interact"):
-		var rate := (70.0 if detailing_equipment == 1 else 35.0) if service == "detail" else pressure.job_speed()
+		var rate: float = (70.0 if detailing_equipment == 1 else 35.0) if service == "detail" else pressure.job_speed()
 		zone_progress = min(100.0, zone_progress + rate * delta)
 		var total := (float(zone_index) + zone_progress / 100.0) / _zone_count() * 100.0
 		progress_bar.value = total
@@ -407,7 +411,7 @@ func _complete_service() -> void:
 	var payout := 0
 	var expense := 0
 	if service == "detail":
-		var result := business.complete_customer(reputation)
+		var result: Dictionary = business.complete_customer(reputation)
 		payout = int(DETAIL_JOBS[current_job].pay) + negotiated_bonus + int(result.quality_bonus)
 		jobs_completed += 1
 		customer_car.mesh.material = _mat(DETAIL_JOBS[current_job].color)
@@ -431,7 +435,7 @@ func _complete_service() -> void:
 
 
 func _advance_day() -> void:
-	var overhead := economy.detailing_daily_overhead() + pressure.daily_payroll()
+	var overhead: int = economy.detailing_daily_overhead() + pressure.daily_payroll()
 	cash -= economy.record_expense(overhead)
 	day += 1
 	jobs_today = 0
@@ -441,7 +445,7 @@ func _advance_day() -> void:
 func _negotiate() -> void:
 	if job_state != 0 or service != "detail":
 		return
-	var chance := 55 + min(reputation * 5,30)
+	var chance: int = 55 + min(reputation * 5,30)
 	negotiated_bonus = 20 if randi_range(1,100) <= chance else 0
 	status_label.text = "SUCCESS • Customer accepted +$20" if negotiated_bonus else "Customer held firm at the original price"
 	negotiate_button.disabled = true
@@ -485,7 +489,7 @@ func _use_supply_store() -> void:
 		status_label.text = "Build $2,500 cash and 12 reputation to open this business branch"
 		return
 	if pressure.equipment_level < 3:
-		var price := pressure.equipment_cost()
+		var price: int = pressure.equipment_cost()
 		if cash < price:
 			status_label.text = "You need $%d for the next pressure-washing rig" % price
 			return
@@ -493,7 +497,7 @@ func _use_supply_store() -> void:
 		pressure.equipment_level += 1
 		status_label.text = "EQUIPMENT PURCHASED • %s" % pressure.equipment_name()
 	else:
-		var price := pressure.hire_cost()
+		var price: int = pressure.hire_cost()
 		if not pressure.can_hire(cash):
 			status_label.text = "Crew capacity reached or insufficient cash ($%d required)" % price
 			return

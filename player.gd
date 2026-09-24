@@ -72,7 +72,7 @@ func _apply_bounds() -> void:
 
 
 func _update_camera(delta: float) -> void:
-	var yaw := old_car.rotation.y if driving else $Mesh.rotation.y
+	var yaw: float = old_car.rotation.y if driving else $Mesh.rotation.y
 	var distance := 10.5 if driving else 8.0
 	var desired := Vector3(sin(yaw) * distance, 6.0 if driving else 5.5, cos(yaw) * distance)
 	camera.position = camera.position.lerp(desired, min(1.0, delta * 6.0))
