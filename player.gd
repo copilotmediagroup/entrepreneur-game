@@ -9,6 +9,7 @@ const MAX_FORWARD_SPEED := 19.0
 const MAX_REVERSE_SPEED := 7.0
 const ROLLING_FRICTION := 7.0
 const STEER_RATE := 1.8
+const COAST_STEER_RATE := 1.35
 const WORLD_LIMIT := 38.0
 
 var driving := false
@@ -54,10 +55,14 @@ func _drive(delta: float) -> void:
 	var steering := Input.get_axis("move_left", "move_right")
 	var steer_strength: float = clamp(abs(car_speed) / 5.0, 0.15, 1.0)
 	if abs(car_speed) > 0.15:
-		old_car.rotation.y -= steering * STEER_RATE * steer_strength * sign(car_speed) * delta
+		var steer_rate := STEER_RATE if abs(car_speed) < 12.0 else COAST_STEER_RATE
+		old_car.rotation.y -= steering * steer_rate * steer_strength * sign(car_speed) * delta
 	var forward := Vector3(-sin(old_car.rotation.y), 0, -cos(old_car.rotation.y))
 	velocity = forward * car_speed
 	move_and_slide()
+	# Collisions should scrub speed instead of letting the car push forever.
+	if get_slide_collision_count() > 0:
+		car_speed *= 0.72
 	old_car.global_position = Vector3(global_position.x, 0.7, global_position.z)
 	$Mesh.visible = false
 
@@ -105,3 +110,8 @@ func force_exit_vehicle() -> void:
 
 func speed_mph() -> int:
 	return int(abs(car_speed) * 2.2)
+
+
+func set_parked_car(pos: Vector3, yaw: float) -> void:
+	old_car.global_position = Vector3(pos.x, 0.7, pos.z)
+	old_car.rotation.y = yaw

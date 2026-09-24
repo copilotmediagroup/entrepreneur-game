@@ -33,8 +33,11 @@ var last_player_pos := Vector3.ZERO
 var current_contract: Dictionary = {}
 
 var marker: MeshInstance3D
-var customer_car: MeshInstance3D
-var customer_npc: MeshInstance3D
+var customer_car: Node3D
+var customer_car_body: MeshInstance3D
+var customer_npc: Node3D
+var customer_sign: Label3D
+var dirt_panels: Array[MeshInstance3D] = []
 var zone_marker: MeshInstance3D
 var gas_marker: MeshInstance3D
 var supply_marker: MeshInstance3D
@@ -51,6 +54,10 @@ var pressure_button: Button
 var negotiate_button: Button
 var skip_button: Button
 var reset_button: Button
+var waypoint_label: Label
+var guide_label: Label
+var customer_met := false
+var save_notice_time := 0.0
 
 const DETAIL_JOBS := [
 	{"name":"Jessica R.", "car":"BMW 328i", "pay":85, "pos":Vector3(19,.25,-12), "color":Color(.08,.32,.70)},
@@ -73,7 +80,7 @@ func _ready() -> void:
 	_load_game()
 	last_player_pos = player.global_position
 	_update_hud()
-	_offer_detail_job()
+	_offer_detail_job(false)
 
 
 func _mat(color: Color, emission := false) -> StandardMaterial3D:
@@ -106,6 +113,55 @@ func _box(size: Vector3, pos: Vector3, color: Color, collision := false) -> Mesh
 	return mesh_node
 
 
+func _part(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
+	var node := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mesh.material = _mat(color)
+	node.mesh = mesh
+	node.position = pos
+	parent.add_child(node)
+	return node
+
+
+func _build_car(parent: Node3D, color: Color, worn := false) -> MeshInstance3D:
+	var body := _part(parent, Vector3(2.15,.65,4.25),Vector3(0,.35,0),color)
+	_part(parent,Vector3(1.8,.62,2.05),Vector3(0,.88,.15),Color(.10,.16,.2))
+	_part(parent,Vector3(1.88,.08,.12),Vector3(0,.63,-2.14),Color(.9,.12,.08,1.0))
+	_part(parent,Vector3(1.88,.08,.12),Vector3(0,.63,2.14),Color(1,.88,.55))
+	for x in [-1.08,1.08]:
+		for z in [-1.35,1.35]:
+			_part(parent,Vector3(.24,.72,.72),Vector3(x,.2,z),Color(.025,.025,.03))
+	if worn:
+		_part(parent,Vector3(.7,.02,.5),Vector3(.45,.69,-.7),Color(.24,.18,.12))
+	return body
+
+
+func _build_person(parent: Node3D, shirt: Color) -> void:
+	_part(parent,Vector3(.8,1.0,.42),Vector3(0,1.15,0),shirt)
+	_part(parent,Vector3(.28,.85,.3),Vector3(-.23,.38,0),Color(.12,.14,.18))
+	_part(parent,Vector3(.28,.85,.3),Vector3(.23,.38,0),Color(.12,.14,.18))
+	var head := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = .32
+	sphere.height = .64
+	sphere.material = _mat(Color(.55,.31,.18))
+	head.mesh = sphere
+	head.position = Vector3(0,1.95,0)
+	parent.add_child(head)
+
+
+func _world_sign(text: String, pos: Vector3, color: Color) -> void:
+	var sign := Label3D.new()
+	sign.text = text
+	sign.font_size = 54
+	sign.modulate = color
+	sign.outline_size = 10
+	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sign.position = pos
+	add_child(sign)
+
+
 func _make_marker(color: Color) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	var mesh := CylinderMesh.new()
@@ -136,11 +192,17 @@ func _build_neighborhood() -> void:
 			_box(Vector3(4,.05,7), Vector3(x + (-6.5 if x < 0 else 6.5),.22,z), Color(.45,.45,.43))
 	# Apartment, gas canopy/pumps, and business supply warehouse.
 	_box(Vector3(13,6,8), Vector3(-18,3,-34), Color(.52,.58,.63), true)
+	_box(Vector3(3.2,.12,8), Vector3(-10,.24,-34), Color(.48,.48,.46))
+	_box(Vector3(2,3,.2), Vector3(-11.4,1.5,-29.9), Color(.16,.28,.38))
 	_box(Vector3(13,.6,9), Vector3(20,4.5,-32), Color(.86,.16,.1), true)
 	_box(Vector3(1,3,1), Vector3(17,1.5,-32), Color(.82,.12,.08), true)
 	_box(Vector3(1,3,1), Vector3(23,1.5,-32), Color(.82,.12,.08), true)
 	_box(Vector3(14,6,9), Vector3(-21,3,32), Color(.18,.34,.48), true)
 	_box(Vector3(8,2.4,.3), Vector3(-21,5.5,27.4), Color(.95,.68,.1))
+	_world_sign("CITY APARTMENTS",Vector3(-18,6.8,-29.8),Color(.75,.9,1))
+	_world_sign("YOUR APARTMENT",Vector3(-12,5.8,-.8),Color(.75,.9,1))
+	_world_sign("QUICKFUEL",Vector3(20,6,-27.2),Color(1,.82,.25))
+	_world_sign("BIZ SUPPLY",Vector3(-21,7,27.2),Color(.35,.85,1))
 	# Trees and curbs make the blocks readable at driving speed.
 	for x in [-34.0,-11.0,11.0,34.0]:
 		for z in [-20.0,20.0]:
@@ -153,18 +215,29 @@ func _build_neighborhood() -> void:
 	gas_marker.position = Vector3(20,.24,-27)
 	supply_marker = _make_marker(Color(.2,.7,1))
 	supply_marker.position = Vector3(-21,.24,26)
-	customer_car = _box(Vector3(2.2,1.2,4.5), Vector3.ZERO, Color(.28,.2,.12))
-	customer_npc = MeshInstance3D.new()
-	var npc_mesh := CapsuleMesh.new()
-	npc_mesh.radius = .45
-	npc_mesh.height = 1.7
-	npc_mesh.material = _mat(Color(.8,.55,.25))
-	customer_npc.mesh = npc_mesh
+	# Replace prototype blocks with readable, multi-part vehicles and people.
+	$OldCar.mesh = null
+	_build_car($OldCar,Color(.26,.32,.38),true)
+	customer_car = Node3D.new()
+	add_child(customer_car)
+	customer_car_body = _build_car(customer_car,Color(.28,.2,.12))
+	dirt_panels.append(_part(customer_car,Vector3(2.2,.3,.7),Vector3(0,.48,1.25),Color(.30,.22,.12)))
+	dirt_panels.append(_part(customer_car,Vector3(2.2,.3,.7),Vector3(0,.48,-1.25),Color(.30,.22,.12)))
+	dirt_panels.append(_part(customer_car,Vector3(.08,.42,2.2),Vector3(1.09,.55,0),Color(.30,.22,.12)))
+	dirt_panels.append(_part(customer_car,Vector3(.08,.42,2.2),Vector3(-1.09,.55,0),Color(.30,.22,.12)))
+	customer_npc = Node3D.new()
+	_build_person(customer_npc,Color(.88,.47,.16))
 	add_child(customer_npc)
+	customer_sign = Label3D.new()
+	customer_sign.font_size = 44
+	customer_sign.outline_size = 9
+	customer_sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	add_child(customer_sign)
 	marker.visible = false
 	zone_marker.visible = false
 	customer_car.visible = false
 	customer_npc.visible = false
+	customer_sign.visible = false
 
 
 func _label(pos: Vector2, size: int) -> Label:
@@ -193,6 +266,11 @@ func _build_ui() -> void:
 	context_label = _label(Vector2(440,530),18)
 	context_label.size = Vector2(500,60)
 	context_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	waypoint_label = _label(Vector2(440,24),22)
+	waypoint_label.size = Vector2(400,42)
+	waypoint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	guide_label = _label(Vector2(24,275),15)
+	guide_label.size = Vector2(390,115)
 	progress_label = _label(Vector2(440,585),18)
 	progress_bar = ProgressBar.new()
 	progress_bar.position = Vector2(440,615)
@@ -220,12 +298,17 @@ func _process(delta: float) -> void:
 		if distance < 5.0:
 			if player.is_driving():
 				status_label.text = "Park and press F to exit your car"
-			else:
+			elif not customer_met and service == "detail":
+				status_label.text = "Meet the customer • Walk up and press E"
+			elif service == "pressure" or customer_met:
 				_start_service()
 	elif job_state == 2:
 		_service_process(delta)
 	_update_context()
 	_update_hud()
+	_update_waypoint()
+	if save_notice_time > 0.0:
+		save_notice_time -= delta
 	last_player_pos = player.global_position
 
 
@@ -246,7 +329,11 @@ func _handle_vehicle_and_fuel() -> void:
 func _handle_world_interactions() -> void:
 	if not Input.is_action_just_pressed("interact") or job_state == 2:
 		return
-	if player.global_position.distance_to(gas_marker.global_position) < 3.5:
+	if job_state == 1 and service == "detail" and not customer_met and player.global_position.distance_to(customer_npc.global_position) < 3.5:
+		customer_met = true
+		status_label.text = "%s: Thanks for coming! Please clean all four highlighted sections." % _active_customer_name()
+		objective.text = "OBJECTIVE: Walk to the car to begin the detail"
+	elif player.global_position.distance_to(gas_marker.global_position) < 3.5:
 		_refuel()
 	elif player.global_position.distance_to(supply_marker.global_position) < 3.5:
 		_use_supply_store()
@@ -254,7 +341,9 @@ func _handle_world_interactions() -> void:
 
 func _update_context() -> void:
 	var text := ""
-	if player.global_position.distance_to(gas_marker.global_position) < 4.5:
+	if job_state == 1 and service == "detail" and not customer_met and player.global_position.distance_to(customer_npc.global_position) < 4.5:
+		text = "%s • Press E to greet customer" % _active_customer_name().to_upper()
+	elif player.global_position.distance_to(gas_marker.global_position) < 4.5:
 		text = "QUICKFUEL • Press E to fill tank ($25)"
 	elif player.global_position.distance_to(supply_marker.global_position) < 4.5:
 		if detailing_equipment == 0:
@@ -270,6 +359,15 @@ func _update_context() -> void:
 	context_label.text = text
 
 
+func _update_waypoint() -> void:
+	if job_state != 1 or not marker.visible:
+		waypoint_label.text = ""
+		return
+	var delta := marker.global_position - player.global_position
+	var direction := "N" if abs(delta.z) > abs(delta.x) and delta.z < 0 else "S" if abs(delta.z) > abs(delta.x) else "E" if delta.x > 0 else "W"
+	waypoint_label.text = "◆ %s  •  %.0f m  •  %s" % [_active_customer_name(),delta.length(),direction]
+
+
 func _update_hud() -> void:
 	business.level = business.calculate_level(cash, reputation, pressure.completed)
 	cash_label.text = "CASH: $%d" % cash
@@ -280,13 +378,25 @@ func _update_hud() -> void:
 		branch_label.text = "PRESSURE WASHING: ACTIVE • Supplies/job $%d • Payroll/day $%d" % [economy.pressure_supply_cost(pressure.equipment_level),pressure.daily_payroll()]
 	else:
 		branch_label.text = "NEXT BRANCH: Pressure Washing at $2,500 + 12 REP"
+	var steps := [
+		("✓ Start with your $300 budget"),
+		("✓ Accept a detailing lead" if job_state > 0 else "1  Accept the lead at top-right"),
+		("✓ Meet the customer" if customer_met or job_state >= 2 else "2  Drive ◆ waypoint, park, greet"),
+		("✓ Finish all work zones" if job_state == 3 else "3  Hold E at each yellow zone"),
+		("NEXT: Save $2,500 + earn 12 REP for pressure washing")
+	]
+	guide_label.text = "EARLY-GAME GUIDE\n" + "\n".join(steps)
 	pressure_button.visible = pressure.unlocked(cash,reputation) and pressure.equipment_level > 0 and job_state == 3
 
 
-func _offer_detail_job() -> void:
+func _offer_detail_job(advance := true) -> void:
 	service = "detail"
-	current_job = (current_job + 1) % DETAIL_JOBS.size()
+	if advance:
+		current_job = (current_job + 1) % DETAIL_JOBS.size()
+	elif current_job < 0 or current_job >= DETAIL_JOBS.size():
+		current_job = 0
 	job_state = 0
+	customer_met = false
 	negotiated_bonus = 0
 	zone_index = 0
 	zone_progress = 0
@@ -324,6 +434,7 @@ func _show_offer() -> void:
 	marker.visible = false
 	customer_car.visible = false
 	customer_npc.visible = false
+	customer_sign.visible = false
 	negotiate_button.visible = service == "detail"
 	negotiate_button.disabled = false
 	skip_button.visible = true
@@ -344,8 +455,15 @@ func _on_accept_pressed() -> void:
 		pos = job.pos
 		customer_car.position = pos + Vector3(2,.45,0)
 		customer_npc.position = pos + Vector3(-1.5,.85,0)
+		customer_sign.position = pos + Vector3(0,3.4,0)
+		customer_sign.text = "%s • %s" % [job.name,job.car]
 		customer_car.visible = true
 		customer_npc.visible = true
+		customer_sign.visible = true
+		for panel in dirt_panels:
+			panel.visible = true
+		customer_car_body.material_override = _mat(job.color.darkened(.35))
+		customer_met = false
 		objective.text = "OBJECTIVE: Drive to %s's property" % job.name
 	else:
 		pos = current_contract.pos
@@ -393,6 +511,8 @@ func _service_process(delta: float) -> void:
 		progress_label.text = "%s: %d%% • Zone %d/%d" % [service.to_upper(),int(total),zone_index+1,_zone_count()]
 		status_label.text = "Pressure washing..." if service == "pressure" else "Cleaning vehicle section..."
 		if zone_progress >= 100.0:
+			if service == "detail" and zone_index < dirt_panels.size():
+				dirt_panels[zone_index].visible = false
 			zone_index += 1
 			zone_progress = 0
 			if zone_index >= _zone_count():
@@ -414,7 +534,7 @@ func _complete_service() -> void:
 		var result: Dictionary = business.complete_customer(reputation)
 		payout = int(DETAIL_JOBS[current_job].pay) + negotiated_bonus + int(result.quality_bonus)
 		jobs_completed += 1
-		customer_car.mesh.material = _mat(DETAIL_JOBS[current_job].color)
+		customer_car_body.material_override = _mat(DETAIL_JOBS[current_job].color)
 		status_label.text = "%s loved the detail%s" % [DETAIL_JOBS[current_job].name," • Referral earned!" if result.referral else ""]
 	else:
 		payout = int(current_contract.pay)
@@ -513,7 +633,7 @@ func _active_customer_name() -> String:
 
 func _save_game() -> void:
 	var data := {
-		"save_version": 2, "cash": cash, "reputation": reputation, "jobs": jobs_completed,
+		"save_version": 3, "cash": cash, "reputation": reputation, "jobs": jobs_completed,
 		"equipment": detailing_equipment, "day": day, "today": jobs_today, "fuel": fuel,
 		"customer": current_job, "business": business.serialize(), "economy": economy.serialize(),
 		"pressure": pressure.serialize(),
@@ -521,33 +641,57 @@ func _save_game() -> void:
 		"earned": economy.earned, "expenses": economy.expenses, "referrals": business.referrals,
 		"business_level": business.level, "streak": business.streak, "best_streak": business.best_streak,
 		"pressure_unlocked": pressure.unlocked(cash,reputation), "pressure_jobs": pressure.completed,
-		"lifetime_customers": business.lifetime_customers
+		"lifetime_customers": business.lifetime_customers,
+		"player_pos": [player.global_position.x,player.global_position.y,player.global_position.z],
+		"car_pos": [$OldCar.global_position.x,$OldCar.global_position.y,$OldCar.global_position.z],
+		"car_yaw": $OldCar.rotation.y
 	}
-	var file := FileAccess.open("user://savegame.json",FileAccess.WRITE)
+	var file := FileAccess.open("user://savegame.tmp",FileAccess.WRITE)
 	if file:
 		file.store_string(JSON.stringify(data))
+		file.close()
+		var save_path := ProjectSettings.globalize_path("user://savegame.json")
+		var temp_path := ProjectSettings.globalize_path("user://savegame.tmp")
+		var backup_path := ProjectSettings.globalize_path("user://savegame.backup.json")
+		if FileAccess.file_exists("user://savegame.json"):
+			DirAccess.copy_absolute(save_path,backup_path)
+			DirAccess.remove_absolute(save_path)
+		DirAccess.rename_absolute(temp_path,save_path)
+		save_notice_time = 2.0
 
 
 func _load_game() -> void:
-	if not FileAccess.file_exists("user://savegame.json"):
-		return
-	var file := FileAccess.open("user://savegame.json",FileAccess.READ)
-	if not file:
-		return
-	var data = JSON.parse_string(file.get_as_text())
+	var data = _read_save("user://savegame.json")
+	if typeof(data) != TYPE_DICTIONARY:
+		data = _read_save("user://savegame.backup.json")
 	if typeof(data) != TYPE_DICTIONARY:
 		return
-	cash = int(data.get("cash",300))
-	reputation = int(data.get("reputation",0))
-	jobs_completed = int(data.get("jobs",0))
-	detailing_equipment = int(data.get("equipment",0))
-	day = int(data.get("day",1))
-	jobs_today = int(data.get("today",0))
-	fuel = float(data.get("fuel",100))
+	cash = max(0,int(data.get("cash",300)))
+	reputation = max(0,int(data.get("reputation",0)))
+	jobs_completed = max(0,int(data.get("jobs",0)))
+	detailing_equipment = clampi(int(data.get("equipment",0)),0,1)
+	day = max(1,int(data.get("day",1)))
+	jobs_today = clampi(int(data.get("today",0)),0,2)
+	fuel = clampf(float(data.get("fuel",100)),0.0,100.0)
 	current_job = int(data.get("customer",-1))
 	business.restore(data.get("business",data))
 	economy.restore(data.get("economy",data))
 	pressure.restore(data.get("pressure",data))
+	var car_pos = data.get("car_pos",[])
+	if car_pos is Array and car_pos.size() == 3:
+		player.set_parked_car(Vector3(clampf(float(car_pos[0]),-36,36),.7,clampf(float(car_pos[2]),-36,36)),float(data.get("car_yaw",0.0)))
+	var saved_pos = data.get("player_pos",[])
+	if saved_pos is Array and saved_pos.size() == 3:
+		player.global_position = Vector3(clampf(float(saved_pos[0]),-36,36),max(1.0,float(saved_pos[1])),clampf(float(saved_pos[2]),-36,36))
+
+
+func _read_save(path: String):
+	if not FileAccess.file_exists(path):
+		return null
+	var file := FileAccess.open(path,FileAccess.READ)
+	if not file:
+		return null
+	return JSON.parse_string(file.get_as_text())
 
 
 func _new_game() -> void:
@@ -562,5 +706,7 @@ func _new_game() -> void:
 	business.restore({})
 	economy.restore({})
 	pressure.restore({})
+	player.global_position = Vector3(-4,1,7)
+	player.set_parked_car(Vector3(-4,.7,1),0.0)
+	_offer_detail_job(false)
 	_save_game()
-	_offer_detail_job()

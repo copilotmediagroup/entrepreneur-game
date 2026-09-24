@@ -42,8 +42,8 @@ func serialize() -> Dictionary:
 
 
 func restore(data: Dictionary) -> void:
-	level = int(data.get("level", data.get("business_level", 1)))
-	referrals = int(data.get("referrals", 0))
-	lifetime_customers = int(data.get("lifetime_customers", data.get("jobs", 0)))
-	streak = int(data.get("streak", 0))
-	best_streak = int(data.get("best_streak", streak))
+	level = clampi(int(data.get("level", data.get("business_level", 1))), 1, 3)
+	referrals = max(0, int(data.get("referrals", 0)))
+	lifetime_customers = max(0, int(data.get("lifetime_customers", data.get("jobs", 0))))
+	streak = max(0, int(data.get("streak", 0)))
+	best_streak = max(streak, int(data.get("best_streak", streak)))
