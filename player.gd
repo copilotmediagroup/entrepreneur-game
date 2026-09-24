@@ -86,7 +86,7 @@ func toggle_vehicle() -> bool:
 		global_position += Vector3(cos(old_car.rotation.y), 0, -sin(old_car.rotation.y)) * 2.2
 		$Mesh.visible = true
 		return true
-	if global_position.distance_to(old_car.global_position) < 3.2:
+	if global_position.distance_to(old_car.global_position) < 5.0:
 		driving = true
 		global_position = Vector3(old_car.global_position.x, 1, old_car.global_position.z)
 		return true
