@@ -4,9 +4,9 @@
 [ext_resource path="res://player.gd" type="Script" id="2"]
 
 [sub_resource type="BoxMesh" id="ground_mesh"]
-size = Vector3(42, 0.2, 34)
+size = Vector3(80, 0.2, 80)
 [sub_resource type="BoxShape3D" id="ground_shape"]
-size = Vector3(42, 0.2, 34)
+size = Vector3(80, 0.2, 80)
 [sub_resource type="BoxMesh" id="road_mesh"]
 size = Vector3(12, 0.08, 34)
 [sub_resource type="BoxMesh" id="house_mesh"]
@@ -67,7 +67,7 @@ mesh = SubResource("player_mesh")
 [node name="Collision" type="CollisionShape3D" parent="Player"]
 shape = SubResource("player_shape")
 [node name="Camera" type="Camera3D" parent="Player"]
-position = Vector3(0, 6.5, 9)
+position = Vector3(0, 5.5, 8)
 rotation_degrees = Vector3(-25, 180, 0)
 current = true
 
