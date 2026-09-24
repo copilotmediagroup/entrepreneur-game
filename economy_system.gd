@@ -36,5 +36,5 @@ func serialize() -> Dictionary:
 
 
 func restore(data: Dictionary) -> void:
-	earned = int(data.get("earned", 0))
-	expenses = int(data.get("expenses", 0))
+	earned = max(0, int(data.get("earned", 0)))
+	expenses = max(0, int(data.get("expenses", 0)))

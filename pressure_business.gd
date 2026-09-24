@@ -74,8 +74,8 @@ func serialize() -> Dictionary:
 
 
 func restore(data: Dictionary) -> void:
-	completed = int(data.get("completed", data.get("pressure_jobs", 0)))
-	employees = int(data.get("employees", 0))
-	equipment_level = int(data.get("equipment_level", 0))
-	contract_index = int(data.get("contract_index", -1))
+	completed = max(0, int(data.get("completed", data.get("pressure_jobs", 0))))
+	employees = clampi(int(data.get("employees", 0)), 0, 3)
+	equipment_level = clampi(int(data.get("equipment_level", 0)), 0, 3)
+	contract_index = clampi(int(data.get("contract_index", -1)), -1, CONTRACTS.size() - 1)
 	branch_unlocked = bool(data.get("branch_unlocked", data.get("pressure_unlocked", false)))
