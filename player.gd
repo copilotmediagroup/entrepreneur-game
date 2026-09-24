@@ -16,6 +16,8 @@ var driving := false
 var car_speed := 0.0
 var old_car: MeshInstance3D
 var camera: Camera3D
+var motion_time := 0.0
+var vehicle_tier := 0
 
 
 func _ready() -> void:
@@ -78,13 +80,19 @@ func _walk(delta: float) -> void:
 	velocity.y = -GRAVITY if not is_on_floor() else 0.0
 	if input.length() > 0.05:
 		$Mesh.rotation.y = lerp_angle($Mesh.rotation.y, atan2(input.x, input.y), 10.0 * delta)
+		motion_time += delta * 10.0
+		$Mesh.position.y = sin(motion_time) * .055
+		$Mesh.rotation.z = sin(motion_time * .5) * .025
+	else:
+		$Mesh.position.y = lerpf($Mesh.position.y,0.0,min(1.0,delta * 8.0))
+		$Mesh.rotation.z = lerpf($Mesh.rotation.z,0.0,min(1.0,delta * 8.0))
 	move_and_slide()
 
 
 func _drive(delta: float) -> void:
 	var throttle := Input.get_axis("move_back", "move_forward")
 	if throttle > 0.0:
-		car_speed = move_toward(car_speed, MAX_FORWARD_SPEED, ENGINE_ACCEL * throttle * delta)
+		car_speed = move_toward(car_speed, MAX_FORWARD_SPEED + vehicle_tier * 3.0, (ENGINE_ACCEL + vehicle_tier * 2.0) * throttle * delta)
 	elif throttle < 0.0:
 		var rate := BRAKE_ACCEL if car_speed > 0.0 else ENGINE_ACCEL
 		car_speed = move_toward(car_speed, -MAX_REVERSE_SPEED, rate * -throttle * delta)
@@ -153,3 +161,7 @@ func speed_mph() -> int:
 func set_parked_car(pos: Vector3, yaw: float) -> void:
 	old_car.global_position = Vector3(pos.x, 0.7, pos.z)
 	old_car.rotation.y = yaw
+
+
+func configure_vehicle_tier(tier: int) -> void:
+	vehicle_tier = clampi(tier,0,2)

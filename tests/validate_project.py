@@ -34,11 +34,14 @@ def check_project_contract() -> None:
 def check_gameplay_contract() -> None:
     main = (ROOT / "main.gd").read_text()
     required = (
-        'var cash := 300', '"save_version": 3', 'user://savegame.backup.json',
+        'var cash := 300', '"save_version": 4', 'user://savegame.backup.json',
         'customer_met = true', '_complete_service()', '_refuel()', '_use_supply_store()',
         'PRESSURE WASHING', '$2,500 + 12 REP',
         '_toggle_phone()', '_update_ambient_life(delta)', '_build_work_tool()',
         '"home_tier": home_tier', '"vehicle_tier": vehicle_tier',
+        '_build_apartment_interior()', '_sleep_at_home()', '_buy_progression_upgrade()',
+        'phone_tab == "Business"', 'phone_tab == "Money"', '_progress_text()',
+        'available_leads.append', 'economy.recent_text()',
     )
     for fragment in required:
         assert fragment in main, f"missing gameplay contract: {fragment}"
@@ -59,6 +62,9 @@ def check_gameplay_contract() -> None:
     assert main.count("func _complete_service()") == 1
     assert main.count("func _save_game()") == 1
     assert main.count("func _offer_detail_job") == 1
+    economy = (ROOT / "economy_system.gd").read_text()
+    assert "var transactions" in economy
+    assert '"transactions": transactions' in economy
 
 
 if __name__ == "__main__":
