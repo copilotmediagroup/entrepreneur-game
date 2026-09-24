@@ -56,7 +56,7 @@ rotation_degrees = Vector3(0, 90, 0)
 mesh = SubResource("door_mesh")
 
 [node name="OldCar" type="MeshInstance3D" parent="."]
-position = Vector3(-8, 0.7, 5)
+position = Vector3(-4, 0.7, 1)
 mesh = SubResource("car_mesh")
 
 [node name="Player" type="CharacterBody3D" parent="."]

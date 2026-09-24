@@ -109,9 +109,9 @@ func _box(size: Vector3, pos: Vector3, color: Color, collision := false) -> Mesh
 func _make_marker(color: Color) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	var mesh := CylinderMesh.new()
-	mesh.top_radius = 1.1
-	mesh.bottom_radius = 1.1
-	mesh.height = 0.12
+	mesh.top_radius = 1.35
+	mesh.bottom_radius = 1.35
+	mesh.height = 2.8
 	mesh.material = _mat(color, true)
 	node.mesh = mesh
 	add_child(node)
@@ -265,8 +265,8 @@ func _update_context() -> void:
 			text = "BIZ SUPPLY • E: buy %s ($%d)" % [pressure.next_equipment_name(), pressure.equipment_cost()]
 		else:
 			text = "BIZ SUPPLY • E: hire crew member ($%d)" % pressure.hire_cost()
-	elif not player.is_driving() and player.global_position.distance_to($OldCar.global_position) < 3.5:
-		text = "Press F to enter your starter car"
+	elif not player.is_driving() and player.global_position.distance_to($OldCar.global_position) < 5.0:
+		text = "STARTER CAR AHEAD • Press F to enter"
 	context_label.text = text
 
 
