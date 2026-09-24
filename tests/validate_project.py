@@ -27,7 +27,7 @@ def check_project_contract() -> None:
     project = (ROOT / "project.godot").read_text()
     assert 'run/main_scene="res://main.tscn"' in project
     assert 'renderer/rendering_method="gl_compatibility"' in project
-    for action in ("move_forward", "move_back", "move_left", "move_right", "interact", "vehicle"):
+    for action in ("move_forward", "move_back", "move_left", "move_right", "interact", "vehicle", "phone"):
         assert re.search(rf"^{action}=", project, re.MULTILINE), f"missing input: {action}"
 
 
@@ -37,6 +37,8 @@ def check_gameplay_contract() -> None:
         'var cash := 300', '"save_version": 3', 'user://savegame.backup.json',
         'customer_met = true', '_complete_service()', '_refuel()', '_use_supply_store()',
         'PRESSURE WASHING', '$2,500 + 12 REP',
+        '_toggle_phone()', '_update_ambient_life(delta)', '_build_work_tool()',
+        '"home_tier": home_tier', '"vehicle_tier": vehicle_tier',
     )
     for fragment in required:
         assert fragment in main, f"missing gameplay contract: {fragment}"
@@ -52,6 +54,11 @@ def check_gameplay_contract() -> None:
         if cash >= 2500 and job + 1 >= 12:
             break
     assert cash >= 2500 and job + 1 <= 32, "pressure-washing unlock is not economically reachable"
+
+    # One authoritative main loop continues to own job state, payment, and persistence.
+    assert main.count("func _complete_service()") == 1
+    assert main.count("func _save_game()") == 1
+    assert main.count("func _offer_detail_job") == 1
 
 
 if __name__ == "__main__":

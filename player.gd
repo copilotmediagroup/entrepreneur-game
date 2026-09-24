@@ -21,6 +21,44 @@ var camera: Camera3D
 func _ready() -> void:
 	old_car = get_node("../OldCar")
 	camera = $Camera
+	_build_character()
+
+
+func _material(color: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	return material
+
+
+func _character_part(size: Vector3, position: Vector3, color: Color) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mesh.material = _material(color)
+	part.mesh = mesh
+	part.position = position
+	$Mesh.add_child(part)
+	return part
+
+
+func _build_character() -> void:
+	# A low-poly work-ready avatar, built from cheap Compatibility-renderer primitives.
+	$Mesh.mesh = null
+	_character_part(Vector3(.72,.82,.38),Vector3(0,.35,0),Color(.08,.22,.42))
+	_character_part(Vector3(.78,.18,.42),Vector3(0,.7,0),Color(.92,.55,.12))
+	_character_part(Vector3(.22,.72,.25),Vector3(-.22,-.4,0),Color(.10,.11,.14))
+	_character_part(Vector3(.22,.72,.25),Vector3(.22,-.4,0),Color(.10,.11,.14))
+	_character_part(Vector3(.19,.68,.2),Vector3(-.48,.3,0),Color(.48,.27,.16))
+	_character_part(Vector3(.19,.68,.2),Vector3(.48,.3,0),Color(.48,.27,.16))
+	var head := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = .29
+	sphere.height = .58
+	sphere.material = _material(Color(.52,.29,.17))
+	head.mesh = sphere
+	head.position = Vector3(0,1.04,0)
+	$Mesh.add_child(head)
+	_character_part(Vector3(.68,.12,.38),Vector3(0,1.28,0),Color(.06,.08,.11))
 
 
 func _physics_process(delta: float) -> void:

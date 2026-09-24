@@ -23,6 +23,8 @@ var current_job := -1
 var job_state := 0 # 0 offer, 1 travel, 2 working, 3 complete
 var service := "detail"
 var detailing_equipment := 0
+var home_tier := 0
+var vehicle_tier := 0
 var day := 1
 var jobs_today := 0
 var fuel := 100.0
@@ -58,6 +60,17 @@ var waypoint_label: Label
 var guide_label: Label
 var customer_met := false
 var save_notice_time := 0.0
+var phone_open := false
+var phone_button: Button
+var phone_header: Label
+var dialogue_panel: Panel
+var dialogue_label: Label
+var toast_panel: Panel
+var toast_label: Label
+var toast_time := 0.0
+var work_tool: Node3D
+var ambient_people: Array[Node3D] = []
+var ambient_origins: Array[Vector3] = []
 
 const DETAIL_JOBS := [
 	{"name":"Jessica R.", "car":"BMW 328i", "pay":85, "pos":Vector3(19,.25,-12), "color":Color(.08,.32,.70)},
@@ -133,7 +146,11 @@ func _build_car(parent: Node3D, color: Color, worn := false) -> MeshInstance3D:
 		for z in [-1.35,1.35]:
 			_part(parent,Vector3(.24,.72,.72),Vector3(x,.2,z),Color(.025,.025,.03))
 	if worn:
-		_part(parent,Vector3(.7,.02,.5),Vector3(.45,.69,-.7),Color(.24,.18,.12))
+		# Primer patch, faded door and crooked bumper sell the barely-running starter car.
+		_part(parent,Vector3(.7,.03,.5),Vector3(.45,.69,-.7),Color(.24,.18,.12))
+		_part(parent,Vector3(.06,.48,1.1),Vector3(-1.09,.46,.35),Color(.48,.45,.38))
+		var bumper := _part(parent,Vector3(1.65,.13,.16),Vector3(.12,.25,2.18),Color(.3,.3,.28))
+		bumper.rotation.z = .06
 	return body
 
 
@@ -203,12 +220,44 @@ func _build_neighborhood() -> void:
 	_world_sign("YOUR APARTMENT",Vector3(-12,5.8,-.8),Color(.75,.9,1))
 	_world_sign("QUICKFUEL",Vector3(20,6,-27.2),Color(1,.82,.25))
 	_world_sign("BIZ SUPPLY",Vector3(-21,7,27.2),Color(.35,.85,1))
+	# Small commercial strip and a pocket park give each side of town its own identity.
+	_box(Vector3(16,4.5,7),Vector3(27,2.25,4),Color(.62,.38,.22),true)
+	_box(Vector3(15,.06,10),Vector3(26,.22,12),Color(.22,.23,.24))
+	_world_sign("SUNRISE CAFE",Vector3(27,5.3,.4),Color(1,.72,.26))
+	_box(Vector3(11,4,7),Vector3(-28,2,-3),Color(.32,.42,.48),true)
+	_world_sign("BAY AUTO",Vector3(-28,5,-6.6),Color(.95,.35,.22))
+	_box(Vector3(16,.05,14),Vector3(-25,.22,9),Color(.18,.19,.2))
+	_box(Vector3(12,.05,9),Vector3(21,.22,20),Color(.38,.48,.28))
+	_world_sign("MAPLE POCKET PARK",Vector3(21,2.2,15),Color(.72,1,.66))
+	# Lane markings, crosswalks, lamps, mailboxes, parked cars and neighbors add street life.
+	for x in range(-34,35,6):
+		_box(Vector3(2.6,.025,.12),Vector3(x,.205,0),Color(.94,.78,.18))
+	for z in range(-34,35,6):
+		_box(Vector3(.12,.025,2.6),Vector3(0,.215,z),Color(.94,.78,.18))
+	for stripe in [-4.5,-3.0,-1.5,1.5,3.0,4.5]:
+		_box(Vector3(.55,.03,2.0),Vector3(stripe,.23,8),Color(.88,.88,.82))
+	for lamp_pos in [Vector3(-8,0,-18),Vector3(8,0,-18),Vector3(-8,0,18),Vector3(8,0,18)]:
+		_box(Vector3(.16,4,.16),lamp_pos + Vector3(0,2,0),Color(.18,.2,.22))
+		_box(Vector3(.65,.25,.65),lamp_pos + Vector3(0,4,0),Color(1,.86,.55))
 	# Trees and curbs make the blocks readable at driving speed.
 	for x in [-34.0,-11.0,11.0,34.0]:
 		for z in [-20.0,20.0]:
 			_box(Vector3(.7,3,.7), Vector3(x,1.5,z), Color(.26,.18,.09), true)
 			var crown := _box(Vector3(3,3,3), Vector3(x,3.5,z), Color(.12,.36,.13))
 			crown.rotation_degrees = Vector3(0,20,0)
+	for car_data in [[Vector3(25,.45,10),Color(.7,.7,.74),PI/2.0],[Vector3(-25,.45,10),Color(.12,.18,.25),PI/2.0],[Vector3(15,.45,-21),Color(.56,.12,.1),0.0]]:
+		var parked := Node3D.new()
+		parked.position = car_data[0]
+		parked.rotation.y = car_data[2]
+		add_child(parked)
+		_build_car(parked,car_data[1])
+	for person_data in [[Vector3(11,.2,15),Color(.18,.56,.76)],[Vector3(-11,.2,-20),Color(.68,.24,.42)],[Vector3(31,.2,20),Color(.25,.58,.32)],[Vector3(-30,.2,20),Color(.75,.55,.16)]]:
+		var neighbor := Node3D.new()
+		neighbor.position = person_data[0]
+		add_child(neighbor)
+		_build_person(neighbor,person_data[1])
+		ambient_people.append(neighbor)
+		ambient_origins.append(neighbor.position)
 	marker = _make_marker(Color(.1,.7,1))
 	zone_marker = _make_marker(Color(.98,.74,.08))
 	gas_marker = _make_marker(Color(.95,.18,.1))
@@ -238,6 +287,16 @@ func _build_neighborhood() -> void:
 	customer_car.visible = false
 	customer_npc.visible = false
 	customer_sign.visible = false
+	_build_work_tool()
+
+
+func _build_work_tool() -> void:
+	work_tool = Node3D.new()
+	add_child(work_tool)
+	_part(work_tool,Vector3(.45,.7,.45),Vector3(0,.35,0),Color(.92,.58,.08))
+	_part(work_tool,Vector3(.12,.12,1.8),Vector3(0,.75,-.75),Color(.08,.1,.11))
+	_part(work_tool,Vector3(.08,.08,.7),Vector3(0,.72,-1.9),Color(.25,.28,.3))
+	work_tool.visible = false
 
 
 func _label(pos: Vector2, size: int) -> Label:
@@ -258,19 +317,23 @@ func _button(text: String, pos: Vector2, size: Vector2) -> Button:
 
 
 func _build_ui() -> void:
-	business_label = _label(Vector2(24,105),20)
-	objective = _label(Vector2(24,140),20)
-	equipment_label = _label(Vector2(24,175),16)
-	stats_label = _label(Vector2(24,205),16)
-	branch_label = _label(Vector2(24,235),15)
+	$HUD/Title.text = "TONY MOBILE"
+	$HUD/Title.add_theme_color_override("font_color",Color(.96,.72,.22))
+	cash_label.position = Vector2(24,55)
+	business_label = _label(Vector2(24,91),15)
+	objective = _label(Vector2(24,124),19)
+	objective.size = Vector2(650,32)
+	equipment_label = _label(Vector2(24,160),14)
+	stats_label = _label(Vector2(24,188),14)
+	branch_label = _label(Vector2(24,216),14)
 	context_label = _label(Vector2(440,530),18)
 	context_label.size = Vector2(500,60)
 	context_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	waypoint_label = _label(Vector2(440,24),22)
 	waypoint_label.size = Vector2(400,42)
 	waypoint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	guide_label = _label(Vector2(24,275),15)
-	guide_label.size = Vector2(390,115)
+	guide_label = _label(Vector2(24,250),14)
+	guide_label.size = Vector2(330,90)
 	progress_label = _label(Vector2(440,585),18)
 	progress_bar = ProgressBar.new()
 	progress_bar.position = Vector2(440,615)
@@ -287,9 +350,70 @@ func _build_ui() -> void:
 	skip_button.pressed.connect(_decline_lead)
 	reset_button = _button("NEW GAME",Vector2(1100,665),Vector2(120,34))
 	reset_button.pressed.connect(_new_game)
+	phone_button = _button("PHONE  [Q]",Vector2(1090,22),Vector2(150,42))
+	phone_button.pressed.connect(_toggle_phone)
+	job_panel.position = Vector2(410,115)
+	job_panel.size = Vector2(460,430)
+	job_title.position = Vector2(28,55)
+	job_title.size = Vector2(404,40)
+	job_text.position = Vector2(28,115)
+	job_text.size = Vector2(404,150)
+	$HUD/JobPanel/Accept.position = Vector2(28,330)
+	$HUD/JobPanel/Accept.size = Vector2(190,56)
+	negotiate_button.reparent(job_panel)
+	negotiate_button.position = Vector2(28,270)
+	skip_button.reparent(job_panel)
+	skip_button.position = Vector2(240,330)
+	skip_button.size = Vector2(190,56)
+	phone_header = Label.new()
+	phone_header.text = "JOBS  •  INCOMING LEAD"
+	phone_header.position = Vector2(28,18)
+	phone_header.add_theme_font_size_override("font_size",16)
+	phone_header.add_theme_color_override("font_color",Color(.35,.82,1))
+	job_panel.add_child(phone_header)
+	dialogue_panel = Panel.new()
+	dialogue_panel.position = Vector2(330,510)
+	dialogue_panel.size = Vector2(620,100)
+	dialogue_label = Label.new()
+	dialogue_label.position = Vector2(20,14)
+	dialogue_label.size = Vector2(580,72)
+	dialogue_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dialogue_label.add_theme_font_size_override("font_size",18)
+	dialogue_panel.add_child(dialogue_label)
+	$HUD.add_child(dialogue_panel)
+	dialogue_panel.visible = false
+	toast_panel = Panel.new()
+	toast_panel.position = Vector2(430,70)
+	toast_panel.size = Vector2(420,58)
+	toast_label = Label.new()
+	toast_label.position = Vector2(15,13)
+	toast_label.size = Vector2(390,35)
+	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_label.add_theme_font_size_override("font_size",18)
+	toast_panel.add_child(toast_label)
+	$HUD.add_child(toast_panel)
+	toast_panel.visible = false
+	$HUD/Status.position = Vector2(24,670)
+	$HUD/Hint.position = Vector2(24,638)
+
+
+func _toggle_phone() -> void:
+	if job_state != 0:
+		_toast("No new leads while a job is active")
+		return
+	phone_open = not phone_open
+	job_panel.visible = phone_open
+
+
+func _toast(message: String) -> void:
+	toast_label.text = message
+	toast_panel.visible = true
+	toast_time = 3.0
 
 
 func _process(delta: float) -> void:
+	if Input.is_action_just_pressed("phone"):
+		_toggle_phone()
 	_handle_vehicle_and_fuel()
 	_handle_world_interactions()
 	if job_state == 1:
@@ -300,16 +424,33 @@ func _process(delta: float) -> void:
 				status_label.text = "Park and press F to exit your car"
 			elif not customer_met and service == "detail":
 				status_label.text = "Meet the customer • Walk up and press E"
-			elif service == "pressure" or customer_met:
+			elif service == "pressure" or (customer_met and player.global_position.distance_to(customer_car.global_position) < 2.8):
 				_start_service()
+			elif customer_met:
+				status_label.text = "Customer authorized the work • Approach the highlighted car"
 	elif job_state == 2:
 		_service_process(delta)
 	_update_context()
 	_update_hud()
 	_update_waypoint()
+	_update_ambient_life(delta)
+	if toast_time > 0.0:
+		toast_time -= delta
+		toast_panel.visible = true
+	else:
+		toast_panel.visible = false
 	if save_notice_time > 0.0:
 		save_notice_time -= delta
 	last_player_pos = player.global_position
+
+
+func _update_ambient_life(delta: float) -> void:
+	var time := Time.get_ticks_msec() / 1000.0
+	for index in ambient_people.size():
+		var neighbor := ambient_people[index]
+		var origin := ambient_origins[index]
+		neighbor.position.x = origin.x + sin(time * .35 + index * 1.7) * 2.5
+		neighbor.rotation.y = cos(time * .35 + index * 1.7) * .5
 
 
 func _handle_vehicle_and_fuel() -> void:
@@ -331,8 +472,11 @@ func _handle_world_interactions() -> void:
 		return
 	if job_state == 1 and service == "detail" and not customer_met and player.global_position.distance_to(customer_npc.global_position) < 3.5:
 		customer_met = true
-		status_label.text = "%s: Thanks for coming! Please clean all four highlighted sections." % _active_customer_name()
+		dialogue_label.text = "%s\n“Thanks for coming. The car has had a rough week—please take care of all four sections.”" % _active_customer_name()
+		dialogue_panel.visible = true
+		status_label.text = "Permission received • Approach the vehicle"
 		objective.text = "OBJECTIVE: Walk to the car to begin the detail"
+		_toast("CUSTOMER GREETED  •  Work authorized")
 	elif player.global_position.distance_to(gas_marker.global_position) < 3.5:
 		_refuel()
 	elif player.global_position.distance_to(supply_marker.global_position) < 3.5:
@@ -371,7 +515,7 @@ func _update_waypoint() -> void:
 func _update_hud() -> void:
 	business.level = business.calculate_level(cash, reputation, pressure.completed)
 	cash_label.text = "CASH: $%d" % cash
-	business_label.text = "%s  •  %s" % ["TONY MOBILE SERVICES", business.title()]
+	business_label.text = "%s  •  %s  •  BASEMENT STUDIO / '98 HATCHBACK" % ["TONY MOBILE SERVICES", business.title()]
 	stats_label.text = "DAY %d  •  DETAIL %d  •  PRESSURE %d  •  REP %d★  •  NET $%d" % [day,jobs_completed,pressure.completed,reputation,economy.net()]
 	equipment_label.text = "FUEL %d%%  •  %d MPH  •  %s  •  CREW %d" % [int(fuel),player.speed_mph(),pressure.equipment_name(),pressure.employees]
 	if pressure.unlocked(cash,reputation):
@@ -385,7 +529,7 @@ func _update_hud() -> void:
 		("✓ Finish all work zones" if job_state == 3 else "3  Hold E at each yellow zone"),
 		("NEXT: Save $2,500 + earn 12 REP for pressure washing")
 	]
-	guide_label.text = "EARLY-GAME GUIDE\n" + "\n".join(steps)
+	guide_label.text = "FIRST SHIFT\n" + "\n".join(steps.slice(1,4))
 	pressure_button.visible = pressure.unlocked(cash,reputation) and pressure.equipment_level > 0 and job_state == 3
 
 
@@ -403,8 +547,9 @@ func _offer_detail_job(advance := true) -> void:
 	_show_offer()
 	var job: Dictionary = DETAIL_JOBS[current_job]
 	job_title.text = "NEW DETAILING LEAD"
-	job_text.text = "%s\n%s\nFull Detail\nOffer: $%d" % [job.name,job.car,job.pay]
-	objective.text = "OBJECTIVE: Review and accept the detailing lead"
+	job_text.text = "%s\nFull detail • %s\n%s neighborhood • about %d m away\nExpected pay: $%d" % [job.name,job.car,_district_for(job.pos),int(player.global_position.distance_to(job.pos)),job.pay]
+	objective.text = "New detailing lead • Open PHONE [Q]"
+	_toast("NEW JOB LEAD  •  %s  •  Open phone [Q]" % job.name)
 
 
 func _offer_pressure_contract() -> void:
@@ -419,13 +564,14 @@ func _offer_pressure_contract() -> void:
 	zone_progress = 0
 	_show_offer()
 	job_title.text = "PRESSURE CONTRACT"
-	job_text.text = "%s\n%s • %d service zones\nContract: $%d" % [current_contract.name,current_contract.type,current_contract.difficulty,current_contract.pay]
+	job_text.text = "%s\n%s • %d service zones\n%s neighborhood • about %d m away\nExpected pay: $%d" % [current_contract.name,current_contract.type,current_contract.difficulty,_district_for(current_contract.pos),int(player.global_position.distance_to(current_contract.pos)),current_contract.pay]
 	negotiate_button.visible = false
 	objective.text = "OBJECTIVE: Accept the pressure-washing contract"
 
 
 func _show_offer() -> void:
-	job_panel.visible = true
+	phone_open = false
+	job_panel.visible = false
 	next_job_button.visible = false
 	pressure_button.visible = false
 	progress_bar.visible = false
@@ -438,14 +584,15 @@ func _show_offer() -> void:
 	negotiate_button.visible = service == "detail"
 	negotiate_button.disabled = false
 	skip_button.visible = true
-	status_label.text = "NEW LEAD • Accept or decline"
-	hint.text = "WASD Move/Drive • F Enter/Exit • E Interact/Work"
+	status_label.text = "New lead waiting on your phone"
+	hint.text = "WASD Move/Drive  •  F Car  •  E Interact  •  Q Phone"
 
 
 func _on_accept_pressed() -> void:
 	if job_state != 0:
 		return
 	job_state = 1
+	phone_open = false
 	job_panel.visible = false
 	negotiate_button.visible = false
 	skip_button.visible = false
@@ -462,6 +609,7 @@ func _on_accept_pressed() -> void:
 		customer_sign.visible = true
 		for panel in dirt_panels:
 			panel.visible = true
+			panel.scale = Vector3.ONE
 		customer_car_body.material_override = _mat(job.color.darkened(.35))
 		customer_met = false
 		objective.text = "OBJECTIVE: Drive to %s's property" % job.name
@@ -470,11 +618,13 @@ func _on_accept_pressed() -> void:
 		objective.text = "OBJECTIVE: Drive to %s • %s" % [current_contract.name,current_contract.type]
 	marker.position = pos
 	marker.visible = true
-	status_label.text = "CONTRACT ACCEPTED • Follow the blue destination marker"
+	status_label.text = "Job accepted • Follow the blue destination marker"
+	_toast("JOB ACCEPTED  •  Route added")
 
 
 func _start_service() -> void:
 	job_state = 2
+	dialogue_panel.visible = false
 	marker.visible = false
 	progress_bar.visible = true
 	progress_label.visible = true
@@ -483,12 +633,15 @@ func _start_service() -> void:
 	_position_zone()
 	objective.text = "OBJECTIVE: Complete every %s zone" % service
 	status_label.text = "Move to the yellow work point and hold E"
+	_toast("WORK STARTED  •  Complete every section")
 
 
 func _position_zone() -> void:
 	var offsets := [Vector3(2,0,2.7),Vector3(2,0,-2.7),Vector3(3.3,0,0),Vector3(-3.3,0,0),Vector3(0,0,3.5)]
 	var base: Vector3 = customer_car.global_position if service == "detail" else marker.global_position
 	zone_marker.global_position = base + offsets[zone_index]
+	work_tool.global_position = zone_marker.global_position + Vector3(.7,0,.2)
+	work_tool.visible = true
 	zone_marker.visible = true
 	var count := _zone_count()
 	progress_bar.value = float(zone_index) / count * 100.0
@@ -506,6 +659,9 @@ func _service_process(delta: float) -> void:
 	if Input.is_action_pressed("interact"):
 		var rate: float = (70.0 if detailing_equipment == 1 else 35.0) if service == "detail" else pressure.job_speed()
 		zone_progress = min(100.0, zone_progress + rate * delta)
+		if service == "detail" and zone_index < dirt_panels.size():
+			# The grime visibly recedes throughout each hold, not only at completion.
+			dirt_panels[zone_index].scale.x = max(.04,1.0-zone_progress/100.0)
 		var total := (float(zone_index) + zone_progress / 100.0) / _zone_count() * 100.0
 		progress_bar.value = total
 		progress_label.text = "%s: %d%% • Zone %d/%d" % [service.to_upper(),int(total),zone_index+1,_zone_count()]
@@ -514,6 +670,7 @@ func _service_process(delta: float) -> void:
 			if service == "detail" and zone_index < dirt_panels.size():
 				dirt_panels[zone_index].visible = false
 			zone_index += 1
+			_toast("SECTION CLEAN  •  %d/%d complete" % [zone_index,_zone_count()])
 			zone_progress = 0
 			if zone_index >= _zone_count():
 				_complete_service()
@@ -526,6 +683,7 @@ func _service_process(delta: float) -> void:
 func _complete_service() -> void:
 	job_state = 3
 	zone_marker.visible = false
+	work_tool.visible = false
 	progress_bar.visible = false
 	progress_label.visible = false
 	var payout := 0
@@ -549,6 +707,7 @@ func _complete_service() -> void:
 	if jobs_today >= 3:
 		_advance_day()
 	objective.text = "SERVICE COMPLETE • $%d gross • $%d net" % [payout,payout-expense]
+	_toast("PAID +$%d  •  REPUTATION +1" % (payout-expense))
 	next_job_button.visible = true
 	pressure_button.visible = pressure.unlocked(cash,reputation) and pressure.equipment_level > 0
 	_save_game()
@@ -603,6 +762,7 @@ func _use_supply_store() -> void:
 		cash -= economy.record_expense(200)
 		detailing_equipment = 1
 		status_label.text = "DETAILING PRESSURE WASHER PURCHASED • Cleaning is twice as fast"
+		_toast("EQUIPMENT UNLOCKED  •  Detail Washer")
 		_save_game()
 		return
 	if not pressure.unlocked(cash,reputation):
@@ -616,6 +776,7 @@ func _use_supply_store() -> void:
 		cash -= economy.record_expense(price)
 		pressure.equipment_level += 1
 		status_label.text = "EQUIPMENT PURCHASED • %s" % pressure.equipment_name()
+		_toast("BUSINESS UPGRADE  •  %s" % pressure.equipment_name())
 	else:
 		var price: int = pressure.hire_cost()
 		if not pressure.can_hire(cash):
@@ -624,7 +785,18 @@ func _use_supply_store() -> void:
 		cash -= economy.record_expense(price)
 		pressure.hire()
 		status_label.text = "EMPLOYEE HIRED • Jobs are faster • Daily payroll increased"
+		_toast("TEAM GROWTH  •  Crew member hired")
 	_save_game()
+
+
+func _district_for(pos: Vector3) -> String:
+	if pos.z < -20:
+		return "Northside"
+	if pos.z > 20:
+		return "Warehouse District"
+	if pos.x > 0:
+		return "Maple East"
+	return "Bay Street"
 
 
 func _active_customer_name() -> String:
@@ -634,7 +806,8 @@ func _active_customer_name() -> String:
 func _save_game() -> void:
 	var data := {
 		"save_version": 3, "cash": cash, "reputation": reputation, "jobs": jobs_completed,
-		"equipment": detailing_equipment, "day": day, "today": jobs_today, "fuel": fuel,
+		"equipment": detailing_equipment, "home_tier": home_tier, "vehicle_tier": vehicle_tier,
+		"day": day, "today": jobs_today, "fuel": fuel,
 		"customer": current_job, "business": business.serialize(), "economy": economy.serialize(),
 		"pressure": pressure.serialize(),
 		# Legacy keys keep saves readable by earlier prototype builds.
@@ -670,6 +843,8 @@ func _load_game() -> void:
 	reputation = max(0,int(data.get("reputation",0)))
 	jobs_completed = max(0,int(data.get("jobs",0)))
 	detailing_equipment = clampi(int(data.get("equipment",0)),0,1)
+	home_tier = max(0,int(data.get("home_tier",0)))
+	vehicle_tier = max(0,int(data.get("vehicle_tier",0)))
 	day = max(1,int(data.get("day",1)))
 	jobs_today = clampi(int(data.get("today",0)),0,2)
 	fuel = clampf(float(data.get("fuel",100)),0.0,100.0)
@@ -700,6 +875,8 @@ func _new_game() -> void:
 	jobs_completed = 0
 	current_job = -1
 	detailing_equipment = 0
+	home_tier = 0
+	vehicle_tier = 0
 	day = 1
 	jobs_today = 0
 	fuel = 100.0
