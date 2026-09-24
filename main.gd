@@ -71,6 +71,16 @@ var toast_time := 0.0
 var work_tool: Node3D
 var ambient_people: Array[Node3D] = []
 var ambient_origins: Array[Vector3] = []
+var apartment_door: MeshInstance3D
+var apartment_exit: MeshInstance3D
+var bed_marker: MeshInstance3D
+var upgrade_marker: MeshInstance3D
+var inside_apartment := false
+var phone_tab := "Jobs"
+var phone_tabs: Array[Button] = []
+var lead_buttons: Array[Button] = []
+var available_leads: Array[int] = []
+var milestone_level := 0
 
 const DETAIL_JOBS := [
 	{"name":"Jessica R.", "car":"BMW 328i", "pay":85, "pos":Vector3(19,.25,-12), "color":Color(.08,.32,.70)},
@@ -93,6 +103,7 @@ func _ready() -> void:
 	_load_game()
 	last_player_pos = player.global_position
 	_update_hud()
+	_refresh_vehicle_appearance()
 	_offer_detail_job(false)
 
 
@@ -288,6 +299,34 @@ func _build_neighborhood() -> void:
 	customer_npc.visible = false
 	customer_sign.visible = false
 	_build_work_tool()
+	_build_apartment_interior()
+	upgrade_marker = _make_marker(Color(.72,.32,1))
+	upgrade_marker.position = Vector3(-28,.24,-8)
+	_world_sign("MOTORS + HOMES\nUPGRADE BOARD",Vector3(-28,2.8,-8),Color(.85,.62,1))
+
+
+func _build_apartment_interior() -> void:
+	# The studio is elevated above the exterior map, keeping one continuous world scene.
+	var center := Vector3(-18,10,-34)
+	_box(Vector3(11,.3,8),center,Color(.32,.28,.24),true)
+	_box(Vector3(11,3.5,.25),center + Vector3(0,1.75,-4),Color(.67,.63,.56))
+	_box(Vector3(11,3.5,.25),center + Vector3(0,1.75,4),Color(.67,.63,.56))
+	_box(Vector3(.25,3.5,8),center + Vector3(-5.5,1.75,0),Color(.67,.63,.56))
+	_box(Vector3(.25,3.5,8),center + Vector3(5.5,1.75,0),Color(.67,.63,.56))
+	# Thrift-store bed, table, kitchenette, bathroom partition, and a couple of boxes.
+	_box(Vector3(3.2,.45,2),center + Vector3(-3,.45,-2.4),Color(.34,.46,.58))
+	_box(Vector3(1.8,.12,1.2),center + Vector3(1.1,.8,-2),Color(.34,.2,.1))
+	_box(Vector3(3,1.1,.7),center + Vector3(2.8,.55,2.8),Color(.72,.68,.56))
+	_box(Vector3(.8,1.8,.8),center + Vector3(4.3,.9,2.8),Color(.82,.84,.8))
+	_box(Vector3(.18,2.7,3),center + Vector3(-3.8,1.35,2.2),Color(.72,.72,.68))
+	_box(Vector3(.7,.5,.7),center + Vector3(-4.6,.3,3),Color(.84,.82,.74))
+	_world_sign("YOUR BASEMENT STUDIO",center + Vector3(0,3,-3.8),Color(.75,.9,1))
+	apartment_door = _make_marker(Color(.28,.86,.7))
+	apartment_door.position = Vector3(-7,.3,-5)
+	apartment_exit = _make_marker(Color(.28,.86,.7))
+	apartment_exit.position = center + Vector3(0,.3,3)
+	bed_marker = _make_marker(Color(.35,.55,1))
+	bed_marker.position = center + Vector3(-3,.3,-2.4)
 
 
 func _build_work_tool() -> void:
@@ -371,6 +410,21 @@ func _build_ui() -> void:
 	phone_header.add_theme_font_size_override("font_size",16)
 	phone_header.add_theme_color_override("font_color",Color(.35,.82,1))
 	job_panel.add_child(phone_header)
+	for index in 4:
+		var tab := Button.new()
+		tab.text = ["JOBS","BUSINESS","MONEY","PROGRESS"][index]
+		tab.position = Vector2(18 + index * 106,48)
+		tab.size = Vector2(102,34)
+		tab.pressed.connect(_set_phone_tab.bind(tab.text.capitalize()))
+		job_panel.add_child(tab)
+		phone_tabs.append(tab)
+	for index in 3:
+		var lead_button := Button.new()
+		lead_button.position = Vector2(28,92 + index * 58)
+		lead_button.size = Vector2(404,52)
+		lead_button.pressed.connect(_select_lead.bind(index))
+		job_panel.add_child(lead_button)
+		lead_buttons.append(lead_button)
 	dialogue_panel = Panel.new()
 	dialogue_panel.position = Vector2(330,510)
 	dialogue_panel.size = Vector2(620,100)
@@ -398,11 +452,66 @@ func _build_ui() -> void:
 
 
 func _toggle_phone() -> void:
-	if job_state != 0:
-		_toast("No new leads while a job is active")
-		return
 	phone_open = not phone_open
 	job_panel.visible = phone_open
+	_refresh_phone()
+
+
+func _set_phone_tab(tab: String) -> void:
+	phone_tab = tab
+	_refresh_phone()
+
+
+func _select_lead(slot: int) -> void:
+	if job_state != 0 or slot >= available_leads.size():
+		return
+	current_job = available_leads[slot]
+	negotiated_bonus = 0
+	negotiate_button.disabled = false
+	_refresh_phone()
+
+
+func _refresh_phone() -> void:
+	if not phone_header:
+		return
+	phone_header.text = "%s  •  TONY MOBILE" % phone_tab.to_upper()
+	for button in lead_buttons:
+		button.visible = phone_tab == "Jobs" and job_state == 0 and service == "detail"
+	job_title.visible = phone_tab != "Jobs" or job_state != 0 or service != "detail"
+	job_text.visible = true
+	job_text.position = Vector2(28,105)
+	job_text.size = Vector2(404,205)
+	$HUD/JobPanel/Accept.visible = phone_tab == "Jobs" and job_state == 0
+	negotiate_button.visible = phone_tab == "Jobs" and job_state == 0 and service == "detail"
+	skip_button.visible = phone_tab == "Jobs" and job_state == 0
+	if phone_tab == "Jobs":
+		if job_state != 0:
+			job_title.visible = true
+			job_title.text = "ACTIVE: %s" % _active_customer_name()
+			job_text.text = "Only one service job can be active.\n\n%s\n%s" % [objective.text,status_label.text]
+		elif service == "detail":
+			job_text.visible = false
+			for index in lead_buttons.size():
+				if index < available_leads.size():
+					var job: Dictionary = DETAIL_JOBS[available_leads[index]]
+					lead_buttons[index].text = "%s • %s • $%d • %s" % [job.name,job.car,job.pay,_district_for(job.pos)]
+					lead_buttons[index].disabled = current_job == available_leads[index]
+		elif not current_contract.is_empty():
+			job_title.text = "PRESSURE CONTRACT"
+	elif phone_tab == "Business":
+		job_title.text = business.title()
+		job_text.text = "Reputation  %d★\nCompleted details  %d\nPressure contracts  %d\nEquipment  %s / %s\nEmployees  %d\nBusiness level  %d" % [reputation,jobs_completed,pressure.completed,"Detail Washer" if detailing_equipment else "Basic hand kit",pressure.equipment_name(),pressure.employees,business.level]
+	elif phone_tab == "Money":
+		job_title.text = "CASH $%d  •  NET $%d" % [cash,economy.net()]
+		job_text.text = "Lifetime income  $%d\nLifetime expenses  $%d\n\nRECENT\n%s" % [economy.earned,economy.expenses,economy.recent_text()]
+	else:
+		job_title.text = "NEXT STEPS"
+		job_text.text = _progress_text()
+
+
+func _progress_text() -> String:
+	var pressure_state := "UNLOCKED" if pressure.branch_unlocked else "$2,500 cash + 12 reputation"
+	return "Detail washer: %s ($200)\nPressure washing: %s\n\nVEHICLES\nReliable work van: $1,800 + 8 REP  [%s]\nFleet truck: $8,000 + level 3  [UPCOMING]\n\nHOMES\nStarter studio: OWNED\nOne-bedroom: $5,000 + 18 REP  [%s]\nTownhouse: $15,000  [UPCOMING]" % ["OWNED" if detailing_equipment else "AVAILABLE",pressure_state,"OWNED" if vehicle_tier >= 1 else "LOCKED/AVAILABLE", "OWNED" if home_tier >= 1 else "LOCKED/AVAILABLE"]
 
 
 func _toast(message: String) -> void:
@@ -481,6 +590,17 @@ func _handle_world_interactions() -> void:
 		_refuel()
 	elif player.global_position.distance_to(supply_marker.global_position) < 3.5:
 		_use_supply_store()
+	elif player.global_position.distance_to(upgrade_marker.global_position) < 3.5:
+		_buy_progression_upgrade()
+	elif not inside_apartment and player.global_position.distance_to(apartment_door.global_position) < 3.5:
+		inside_apartment = true
+		player.global_position = apartment_exit.global_position + Vector3(0,1,0)
+		_toast("HOME BASE  •  Sleep here to end the day")
+	elif inside_apartment and player.global_position.distance_to(apartment_exit.global_position) < 3.5:
+		inside_apartment = false
+		player.global_position = apartment_door.global_position + Vector3(1.5,1,0)
+	elif inside_apartment and player.global_position.distance_to(bed_marker.global_position) < 3.5:
+		_sleep_at_home()
 
 
 func _update_context() -> void:
@@ -498,9 +618,56 @@ func _update_context() -> void:
 			text = "BIZ SUPPLY • E: buy %s ($%d)" % [pressure.next_equipment_name(), pressure.equipment_cost()]
 		else:
 			text = "BIZ SUPPLY • E: hire crew member ($%d)" % pressure.hire_cost()
+	elif player.global_position.distance_to(upgrade_marker.global_position) < 4.5:
+		text = "UPGRADE BOARD • E: buy next vehicle/home upgrade"
+	elif not inside_apartment and player.global_position.distance_to(apartment_door.global_position) < 4.5:
+		text = "YOUR BASEMENT STUDIO • Press E to enter"
+	elif inside_apartment and player.global_position.distance_to(apartment_exit.global_position) < 4.5:
+		text = "APARTMENT DOOR • Press E to leave"
+	elif inside_apartment and player.global_position.distance_to(bed_marker.global_position) < 4.5:
+		text = "THRIFT-STORE BED • Press E to sleep / end day"
 	elif not player.is_driving() and player.global_position.distance_to($OldCar.global_position) < 5.0:
 		text = "STARTER CAR AHEAD • Press F to enter"
 	context_label.text = text
+
+
+func _sleep_at_home() -> void:
+	if player.is_driving() or job_state in [1,2]:
+		_toast("Finish the active service before sleeping")
+		return
+	_advance_day()
+	_toast("RESTED  •  DAY %d  •  Living costs posted" % day)
+	_save_game()
+
+
+func _buy_progression_upgrade() -> void:
+	if vehicle_tier == 0:
+		if reputation < 8 or cash < 1800:
+			_toast("RELIABLE WORK VAN • Requires $1,800 + 8 REP")
+			return
+		cash -= economy.record_expense(1800,"Reliable work van",day)
+		vehicle_tier = 1
+		fuel = 100.0
+		_refresh_vehicle_appearance()
+		_toast("MAJOR UPGRADE  •  Reliable work van purchased")
+	elif home_tier == 0:
+		if reputation < 18 or cash < 5000:
+			_toast("ONE-BEDROOM LEASE • Requires $5,000 + 18 REP")
+			return
+		cash -= economy.record_expense(5000,"One-bedroom deposit",day)
+		home_tier = 1
+		_toast("LIFE UPGRADE  •  One-bedroom secured")
+	else:
+		_toast("Next tiers are upcoming • Keep building the business")
+	_save_game()
+
+
+func _refresh_vehicle_appearance() -> void:
+	player.configure_vehicle_tier(vehicle_tier)
+	if vehicle_tier >= 1:
+		$OldCar.scale = Vector3(1.08,1.08,1.18)
+	else:
+		$OldCar.scale = Vector3.ONE
 
 
 func _update_waypoint() -> void:
@@ -515,9 +682,9 @@ func _update_waypoint() -> void:
 func _update_hud() -> void:
 	business.level = business.calculate_level(cash, reputation, pressure.completed)
 	cash_label.text = "CASH: $%d" % cash
-	business_label.text = "%s  •  %s  •  BASEMENT STUDIO / '98 HATCHBACK" % ["TONY MOBILE SERVICES", business.title()]
+	business_label.text = "%s  •  %s  •  %s / %s" % ["TONY MOBILE SERVICES", business.title(),"ONE-BEDROOM" if home_tier else "BASEMENT STUDIO","WORK VAN" if vehicle_tier else "'98 HATCHBACK"]
 	stats_label.text = "DAY %d  •  DETAIL %d  •  PRESSURE %d  •  REP %d★  •  NET $%d" % [day,jobs_completed,pressure.completed,reputation,economy.net()]
-	equipment_label.text = "FUEL %d%%  •  %d MPH  •  %s  •  CREW %d" % [int(fuel),player.speed_mph(),pressure.equipment_name(),pressure.employees]
+	equipment_label.text = "FUEL %d%%%s  •  %d MPH  •  %s  •  CREW %d" % [int(fuel)," LOW" if fuel < 20 else "",player.speed_mph(),pressure.equipment_name(),pressure.employees]
 	if pressure.unlocked(cash,reputation):
 		branch_label.text = "PRESSURE WASHING: ACTIVE • Supplies/job $%d • Payroll/day $%d" % [economy.pressure_supply_cost(pressure.equipment_level),pressure.daily_payroll()]
 	else:
@@ -535,10 +702,11 @@ func _update_hud() -> void:
 
 func _offer_detail_job(advance := true) -> void:
 	service = "detail"
-	if advance:
-		current_job = (current_job + 1) % DETAIL_JOBS.size()
-	elif current_job < 0 or current_job >= DETAIL_JOBS.size():
-		current_job = 0
+	var start := (current_job + 1) % DETAIL_JOBS.size() if advance and current_job >= 0 else maxi(current_job,0)
+	available_leads.clear()
+	for offset in 3:
+		available_leads.append((start + offset) % DETAIL_JOBS.size())
+	current_job = available_leads[0]
 	job_state = 0
 	customer_met = false
 	negotiated_bonus = 0
@@ -550,6 +718,7 @@ func _offer_detail_job(advance := true) -> void:
 	job_text.text = "%s\nFull detail • %s\n%s neighborhood • about %d m away\nExpected pay: $%d" % [job.name,job.car,_district_for(job.pos),int(player.global_position.distance_to(job.pos)),job.pay]
 	objective.text = "New detailing lead • Open PHONE [Q]"
 	_toast("NEW JOB LEAD  •  %s  •  Open phone [Q]" % job.name)
+	_refresh_phone()
 
 
 func _offer_pressure_contract() -> void:
@@ -699,9 +868,9 @@ func _complete_service() -> void:
 		expense = economy.pressure_supply_cost(pressure.equipment_level)
 		pressure.complete_contract()
 		status_label.text = "%s contract complete • Supplies -$%d" % [current_contract.type,expense]
-	cash += economy.record_income(payout)
+	cash += economy.record_income(payout,"%s payment" % ("Detail" if service == "detail" else "Pressure"),day)
 	if expense > 0:
-		cash -= economy.record_expense(expense)
+		cash -= economy.record_expense(expense,"Pressure supplies",day)
 	reputation += 1
 	jobs_today += 1
 	if jobs_today >= 3:
@@ -710,15 +879,31 @@ func _complete_service() -> void:
 	_toast("PAID +$%d  •  REPUTATION +1" % (payout-expense))
 	next_job_button.visible = true
 	pressure_button.visible = pressure.unlocked(cash,reputation) and pressure.equipment_level > 0
+	_check_milestones()
 	_save_game()
 
 
 func _advance_day() -> void:
-	var overhead: int = economy.detailing_daily_overhead() + pressure.daily_payroll()
-	cash -= economy.record_expense(overhead)
+	var living: int = economy.detailing_daily_overhead(home_tier)
+	var payroll := pressure.daily_payroll()
+	cash = max(0,cash - economy.record_expense(living,"Living, rent & supplies",day))
+	if payroll > 0:
+		cash = max(0,cash - economy.record_expense(payroll,"Crew payroll",day))
 	day += 1
 	jobs_today = 0
-	status_label.text += " • Daily overhead/payroll -$%d" % overhead
+	status_label.text += " • Daily costs -$%d" % (living + payroll)
+
+
+func _check_milestones() -> void:
+	var reached := 0
+	if jobs_completed >= 1: reached = 1
+	if detailing_equipment > 0: reached = 2
+	if reputation >= 8: reached = 3
+	if pressure.branch_unlocked: reached = 4
+	if vehicle_tier > 0 or home_tier > 0: reached = 5
+	if reached > milestone_level:
+		milestone_level = reached
+		_toast(["","FIRST CUSTOMER • Tony Mobile is underway","EQUIPPED • Faster details unlocked","PROVEN OPERATOR • Vehicle upgrade available","NEW BUSINESS PATH • Pressure washing unlocked","LIFE UPGRADE • Your work is paying off"][reached])
 
 
 func _negotiate() -> void:
@@ -736,7 +921,15 @@ func _decline_lead() -> void:
 	if job_state != 0:
 		return
 	if service == "detail":
-		_offer_detail_job()
+		var declined := current_job
+		available_leads.erase(declined)
+		var candidate := (declined + 3) % DETAIL_JOBS.size()
+		while candidate in available_leads:
+			candidate = (candidate + 1) % DETAIL_JOBS.size()
+		available_leads.append(candidate)
+		current_job = available_leads[0]
+		negotiated_bonus = 0
+		_refresh_phone()
 	else:
 		_offer_pressure_contract()
 	status_label.text = "Lead declined • A new opportunity is available"
@@ -748,7 +941,7 @@ func _refuel() -> void:
 	elif cash < 25:
 		status_label.text = "You need $25 to refuel"
 	else:
-		cash -= economy.record_expense(25)
+		cash -= economy.record_expense(25,"Fuel",day)
 		fuel = 100.0
 		status_label.text = "QUICKFUEL • Tank filled • -$25"
 		_save_game()
@@ -759,7 +952,7 @@ func _use_supply_store() -> void:
 		if cash < 200:
 			status_label.text = "You need $200 for the detailing pressure washer"
 			return
-		cash -= economy.record_expense(200)
+		cash -= economy.record_expense(200,"Detail washer",day)
 		detailing_equipment = 1
 		status_label.text = "DETAILING PRESSURE WASHER PURCHASED • Cleaning is twice as fast"
 		_toast("EQUIPMENT UNLOCKED  •  Detail Washer")
@@ -773,7 +966,7 @@ func _use_supply_store() -> void:
 		if cash < price:
 			status_label.text = "You need $%d for the next pressure-washing rig" % price
 			return
-		cash -= economy.record_expense(price)
+		cash -= economy.record_expense(price,"Pressure equipment",day)
 		pressure.equipment_level += 1
 		status_label.text = "EQUIPMENT PURCHASED • %s" % pressure.equipment_name()
 		_toast("BUSINESS UPGRADE  •  %s" % pressure.equipment_name())
@@ -782,7 +975,7 @@ func _use_supply_store() -> void:
 		if not pressure.can_hire(cash):
 			status_label.text = "Crew capacity reached or insufficient cash ($%d required)" % price
 			return
-		cash -= economy.record_expense(price)
+		cash -= economy.record_expense(price,"Employee hiring",day)
 		pressure.hire()
 		status_label.text = "EMPLOYEE HIRED • Jobs are faster • Daily payroll increased"
 		_toast("TEAM GROWTH  •  Crew member hired")
@@ -805,9 +998,9 @@ func _active_customer_name() -> String:
 
 func _save_game() -> void:
 	var data := {
-		"save_version": 3, "cash": cash, "reputation": reputation, "jobs": jobs_completed,
+		"save_version": 4, "cash": cash, "reputation": reputation, "jobs": jobs_completed,
 		"equipment": detailing_equipment, "home_tier": home_tier, "vehicle_tier": vehicle_tier,
-		"day": day, "today": jobs_today, "fuel": fuel,
+		"day": day, "today": jobs_today, "fuel": fuel, "milestone_level": milestone_level,
 		"customer": current_job, "business": business.serialize(), "economy": economy.serialize(),
 		"pressure": pressure.serialize(),
 		# Legacy keys keep saves readable by earlier prototype builds.
@@ -843,12 +1036,13 @@ func _load_game() -> void:
 	reputation = max(0,int(data.get("reputation",0)))
 	jobs_completed = max(0,int(data.get("jobs",0)))
 	detailing_equipment = clampi(int(data.get("equipment",0)),0,1)
-	home_tier = max(0,int(data.get("home_tier",0)))
-	vehicle_tier = max(0,int(data.get("vehicle_tier",0)))
+	home_tier = clampi(int(data.get("home_tier",0)),0,2)
+	vehicle_tier = clampi(int(data.get("vehicle_tier",0)),0,2)
 	day = max(1,int(data.get("day",1)))
 	jobs_today = clampi(int(data.get("today",0)),0,2)
 	fuel = clampf(float(data.get("fuel",100)),0.0,100.0)
 	current_job = int(data.get("customer",-1))
+	milestone_level = clampi(int(data.get("milestone_level",0)),0,5)
 	business.restore(data.get("business",data))
 	economy.restore(data.get("economy",data))
 	pressure.restore(data.get("pressure",data))
@@ -880,6 +1074,8 @@ func _new_game() -> void:
 	day = 1
 	jobs_today = 0
 	fuel = 100.0
+	milestone_level = 0
+	inside_apartment = false
 	business.restore({})
 	economy.restore({})
 	pressure.restore({})
